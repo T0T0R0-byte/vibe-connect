@@ -12,11 +12,15 @@ interface UserData {
     displayName: string;
     photoURL?: string;
     phoneNumber?: string;
-    role: "user" | "vendor";
+    role: "user" | "vendor" | "admin";
     favorites?: string[];
     registeredWorkshops?: string[];
     socialLink?: string;
     businessIdUrl?: string;
+    businessName?: string;
+    customOrdersEnabled?: boolean;
+    bankDetails?: string;
+    isVerified?: boolean;
 }
 
 interface AuthContextType {

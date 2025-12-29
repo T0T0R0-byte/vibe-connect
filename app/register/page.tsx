@@ -7,7 +7,9 @@ import { auth, db, storage } from "@/firebase/firebaseConfig";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { AuthBear } from "@/app/components/AuthBear";
+import { AnimatedBackground } from "@/app/components/AnimatedBackground";
 
 export default function RegisterPage() {
     const [name, setName] = useState("");
@@ -16,6 +18,7 @@ export default function RegisterPage() {
     const [role, setRole] = useState<"user" | "vendor">("user");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [isPasswordFocused, setIsPasswordFocused] = useState(false);
     const router = useRouter();
 
     // Vendor Specific State
@@ -23,71 +26,29 @@ export default function RegisterPage() {
     const [socialLink, setSocialLink] = useState("");
     const [businessIdFile, setBusinessIdFile] = useState<File | null>(null);
 
-    // Helper to convert File to Base64
-    const fileToBase64 = (file: File): Promise<string> => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = (error) => reject(error);
-        });
-    };
-
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
         setLoading(true);
 
         try {
-            // Validation for Vendor
             if (role === "vendor") {
                 if (!phoneNumber || !socialLink || !businessIdFile) {
-                    throw new Error("Please fill all vendor details and upload Business ID.");
+                    throw new Error("Complete all mentor verification steps.");
                 }
             }
 
-            console.log("Registering user:", email);
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
-            console.log("User created:", user.uid);
-
             await updateProfile(user, { displayName: name });
 
             let businessIdUrl = "";
-            let businessIdBase64 = "";
-
             if (role === "vendor" && businessIdFile) {
-                console.log("Processing Business ID...", businessIdFile.name);
-
-                // If file is small (< 700KB), store as Base64 in Firestore
-                if (businessIdFile.size < 700 * 1024) {
-                    console.log("File is small, converting to Base64...");
-                    try {
-                        businessIdBase64 = await fileToBase64(businessIdFile);
-                        console.log("Converted to Base64.");
-                    } catch (err) {
-                        console.error("Base64 conversion failed:", err);
-                    }
-                }
-
-                // If not converted, try Storage
-                if (!businessIdBase64) {
-                    try {
-                        console.log("Uploading Business ID to Storage...");
-                        const sanitizedName = businessIdFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
-                        const storageRef = ref(storage, `business_ids/${user.uid}-${Date.now()}-${sanitizedName}`);
-
-                        await uploadBytes(storageRef, businessIdFile);
-                        businessIdUrl = await getDownloadURL(storageRef);
-                        console.log("Business ID uploaded:", businessIdUrl);
-                    } catch (storageErr: any) {
-                        console.error("Storage Error:", storageErr);
-                        throw new Error(`Failed to upload Business ID: ${storageErr.message || "Network error"}. Please try a smaller file (under 700KB).`);
-                    }
-                }
+                const storageRef = ref(storage, `business_ids/${user.uid}-${Date.now()}-${businessIdFile.name}`);
+                await uploadBytes(storageRef, businessIdFile);
+                businessIdUrl = await getDownloadURL(storageRef);
             }
 
-            // Create user document in Firestore
             await setDoc(doc(db, "users", user.uid), {
                 uid: user.uid,
                 displayName: name,
@@ -96,20 +57,16 @@ export default function RegisterPage() {
                 createdAt: serverTimestamp(),
                 favorites: [],
                 registeredWorkshops: [],
-                // Vendor Fields
                 ...(role === "vendor" && {
                     phoneNumber,
                     socialLink,
                     businessIdUrl,
-                    businessIdBase64,
-                    isVerified: false // Vendors might need approval
+                    isVerified: false
                 })
             });
 
-            console.log("User document created.");
             router.push("/");
         } catch (err: any) {
-            console.error("Registration Error:", err);
             setError(err.message);
         } finally {
             setLoading(false);
@@ -117,129 +74,92 @@ export default function RegisterPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center px-6 py-20">
+        <div className="min-h-screen flex items-center justify-center px-6 py-24 bg-background relative overflow-hidden">
+            <AnimatedBackground />
+
             <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-[0_0_40px_rgba(56,189,248,0.15)]"
+                className="w-full max-w-xl glass-card !p-10 shadow-3xl"
             >
-                <h2 className="text-3xl font-bold text-center mb-6 bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
-                    Create Account
-                </h2>
+                <div className="text-center mb-10">
+                    <AuthBear inputLength={email.length} isPasswordFocused={isPasswordFocused} />
+                    <h2 className="text-4xl font-black text-foreground tracking-tighter uppercase leading-[0.8] mb-3">
+                        Join the <span className="text-primary">Vibe</span>
+                    </h2>
+                    <p className="text-muted-foreground font-bold text-[10px] uppercase tracking-widest">Create your holographic identity</p>
+                </div>
 
-                {error && <p className="text-red-400 text-center mb-4 text-sm">{error}</p>}
+                {error && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-[10px] font-black text-center mb-8 uppercase tracking-widest">
+                        {error}
+                    </motion.div>
+                )}
 
-                <form onSubmit={handleRegister} className="space-y-4">
-                    <div>
-                        <label className="block text-gray-400 text-sm mb-1">Full Name</label>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="w-full px-4 py-3 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-white"
-                            required
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-gray-400 text-sm mb-1">Email</label>
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-4 py-3 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-white"
-                            required
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-gray-400 text-sm mb-1">Password</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-white"
-                            required
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-gray-400 text-sm mb-2">I am a:</label>
-                        <div className="flex gap-4">
-                            <button
-                                type="button"
-                                onClick={() => setRole("user")}
-                                className={`flex-1 py-2 rounded-xl border transition ${role === "user"
-                                    ? "bg-sky-500/20 border-sky-500 text-sky-300"
-                                    : "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10"
-                                    }`}
-                            >
-                                User
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setRole("vendor")}
-                                className={`flex-1 py-2 rounded-xl border transition ${role === "vendor"
-                                    ? "bg-indigo-500/20 border-indigo-500 text-indigo-300"
-                                    : "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10"
-                                    }`}
-                            >
-                                Vendor
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Vendor Specific Fields */}
-                    {role === "vendor" && (
-                        <div className="space-y-4 pt-2 border-t border-white/10">
-                            <div>
-                                <label className="block text-gray-400 text-sm mb-1">Phone Number</label>
-                                <input
-                                    type="tel"
-                                    value={phoneNumber}
-                                    onChange={(e) => setPhoneNumber(e.target.value)}
-                                    className="w-full px-4 py-3 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-white"
-                                    required
-                                    placeholder="+94 77 123 4567"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-gray-400 text-sm mb-1">Social Media Link</label>
-                                <input
-                                    type="url"
-                                    value={socialLink}
-                                    onChange={(e) => setSocialLink(e.target.value)}
-                                    className="w-full px-4 py-3 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-white"
-                                    required
-                                    placeholder="https://instagram.com/yourbusiness"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-gray-400 text-sm mb-1">Business ID (PDF)</label>
-                                <input
-                                    type="file"
-                                    accept="application/pdf"
-                                    onChange={(e) => setBusinessIdFile(e.target.files?.[0] || null)}
-                                    className="w-full text-gray-300 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-500/20 file:text-indigo-300 hover:file:bg-indigo-500/30"
-                                    required
-                                />
+                <form onSubmit={handleRegister} className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-6 md:col-span-2">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Identity Class</label>
+                            <div className="flex gap-3">
+                                <button type="button" onClick={() => setRole("user")} className={`flex-1 py-4 rounded-2xl border transition-all font-black text-[10px] uppercase tracking-widest ${role === "user" ? "bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-[1.02]" : "bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10"}`}>User</button>
+                                <button type="button" onClick={() => setRole("vendor")} className={`flex-1 py-4 rounded-2xl border transition-all font-black text-[10px] uppercase tracking-widest ${role === "vendor" ? "bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-[1.02]" : "bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10"}`}>Vendor</button>
                             </div>
                         </div>
-                    )}
+                    </div>
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full py-3 bg-gradient-to-r from-sky-500 to-indigo-500 rounded-xl font-bold text-white hover:shadow-[0_0_20px_rgba(56,189,248,0.4)] transition disabled:opacity-50"
-                    >
-                        {loading ? "Creating Account..." : "Register"}
-                    </button>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Full Name</label>
+                        <input value={name} onChange={e => setName(e.target.value)} className="w-full px-6 py-4 bg-white/5 text-foreground border border-white/10 rounded-2xl focus:border-primary focus:bg-white/10 outline-none transition-all font-bold text-sm" required placeholder="Display Name" />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Email</label>
+                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-6 py-4 bg-white/5 text-foreground border border-white/10 rounded-2xl focus:border-primary focus:bg-white/10 outline-none transition-all font-bold text-sm" required placeholder="name@vibe.io" />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                        <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Password</label>
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} onFocus={() => setIsPasswordFocused(true)} onBlur={() => setIsPasswordFocused(false)} className="w-full px-6 py-4 bg-white/5 text-foreground border border-white/10 rounded-2xl focus:border-primary focus:bg-white/10 outline-none transition-all font-bold text-sm" required placeholder="••••••••" />
+                    </div>
+
+                    <AnimatePresence>
+                        {role === "vendor" && (
+                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="md:col-span-2 grid md:grid-cols-2 gap-6 overflow-hidden">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Contact Protocol</label>
+                                    <input type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} className="w-full px-6 py-4 bg-white/5 text-foreground border border-white/10 rounded-2xl focus:border-primary focus:bg-white/10 outline-none transition-all font-bold text-sm" placeholder="+94 77..." />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Social Feed</label>
+                                    <input type="url" value={socialLink} onChange={e => setSocialLink(e.target.value)} className="w-full px-6 py-4 bg-white/5 text-foreground border border-white/10 rounded-2xl focus:border-primary focus:bg-white/10 outline-none transition-all font-bold text-sm" placeholder="Instagram / Web" />
+                                </div>
+                                <div className="space-y-2 md:col-span-2">
+                                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Business Identity (PDF)</label>
+                                    <div className="relative h-20 bg-white/5 border border-dashed border-white/20 rounded-2xl flex flex-col items-center justify-center group cursor-pointer hover:border-primary/40 transition-all">
+                                        <input type="file" accept="application/pdf" onChange={e => setBusinessIdFile(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                        <i className={`fa-solid ${businessIdFile ? 'fa-check text-primary' : 'fa-upload text-white/20'} text-xl mb-1`}></i>
+                                        <span className="text-[10px] font-black uppercase text-muted-foreground">{businessIdFile ? businessIdFile.name : "Select Document"}</span>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    <div className="md:col-span-2 pt-4">
+                        <button type="submit" disabled={loading} className="btn-vibe-primary w-full py-5 disabled:opacity-50">
+                            {loading ? "Transmitting..." : "Initialize Identity"}
+                        </button>
+                    </div>
                 </form>
 
-                <p className="text-center text-gray-400 mt-6 text-sm">
-                    Already have an account?{" "}
-                    <Link href="/login" className="text-sky-400 hover:text-sky-300">
-                        Login
-                    </Link>
-                </p>
+                <div className="mt-10 pt-10 border-t border-white/5 text-center">
+                    <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-widest">
+                        Part of the collective?{" "}
+                        <Link href="/login" className="text-primary hover:underline ml-1">
+                            Access Portal
+                        </Link>
+                    </p>
+                </div>
             </motion.div>
         </div>
     );

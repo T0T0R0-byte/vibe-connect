@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/app/context/AuthContext";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { doc, updateDoc, getDoc, collection, query, where, getDocs, addDoc } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -17,35 +17,43 @@ interface Workshop {
     price: number;
     category: string;
     imageUrl: string;
+    imageBase64?: string;
     date: string;
     location: string;
     ageGroup: string;
     rating?: number;
     vendorId: string;
+    refundPolicy?: string;
 }
 
 interface RegisteredWorkshop extends Workshop {
     vendorName: string;
     vendorPhone: string;
-    rating?: number;
-    ratingCount?: number;
     status?: string;
+    registrationId?: string;
+    refundStatus?: string;
+    ratingCount?: number;
+    refundPolicy?: string;
 }
 
 export default function ProfilePage() {
     const { user, userData, loading } = useAuth();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const reviewId = searchParams.get('reviewId');
 
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
     const [socialLink, setSocialLink] = useState("");
-    const [businessIdUrl, setBusinessIdUrl] = useState("");
+    const [businessName, setBusinessName] = useState("");
     const [photo, setPhoto] = useState<File | null>(null);
     const [photoPreview, setPhotoPreview] = useState("");
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [favorites, setFavorites] = useState<Workshop[]>([]);
     const [registeredWorkshops, setRegisteredWorkshops] = useState<RegisteredWorkshop[]>([]);
+    const [customRequests, setCustomRequests] = useState<any[]>([]);
+
 
     // Review Modal State
     const [reviewModalOpen, setReviewModalOpen] = useState(false);
@@ -55,9 +63,7 @@ export default function ProfilePage() {
 
     // Filters
     const [search, setSearch] = useState("");
-    const [category, setCategory] = useState("All");
-    const [location, setLocation] = useState("All");
-    const [priceRange, setPriceRange] = useState("All");
+    const [categoryFilter, setCategoryFilter] = useState("All");
 
     useEffect(() => {
         if (!loading && !user) {
@@ -66,19 +72,30 @@ export default function ProfilePage() {
             setName(userData.displayName || "");
             setPhone(userData.phoneNumber || "");
             setSocialLink(userData.socialLink || "");
-            setBusinessIdUrl(userData.businessIdUrl || "");
+            setBusinessName(userData.businessName || "");
             setPhotoPreview(userData.photoURL || "");
 
             if (userData.role !== 'vendor') {
                 fetchFavorites();
                 fetchRegisteredWorkshops();
+                fetchCustomRequests();
             }
         }
     }, [user, userData, loading, router]);
 
+    useEffect(() => {
+        if (reviewId && registeredWorkshops.length > 0) {
+            const workshopToReview = registeredWorkshops.find(ws => ws.id === reviewId);
+            if (workshopToReview) {
+                openReviewModal(workshopToReview);
+                // Clean up URL
+                router.replace('/profile');
+            }
+        }
+    }, [reviewId, registeredWorkshops, router]);
+
     const fetchFavorites = async () => {
         if (!userData?.favorites || userData.favorites.length === 0) return;
-
         const favs: Workshop[] = [];
         for (const favId of userData.favorites) {
             const docSnap = await getDoc(doc(db, "workshops", favId));
@@ -91,100 +108,79 @@ export default function ProfilePage() {
 
     const fetchRegisteredWorkshops = async () => {
         if (!userData?.registeredWorkshops || userData.registeredWorkshops.length === 0) return;
-
         const registered: RegisteredWorkshop[] = [];
         for (const wsId of userData.registeredWorkshops) {
             const wsDoc = await getDoc(doc(db, "workshops", wsId));
             if (wsDoc.exists()) {
                 const wsData = wsDoc.data() as Workshop;
-
-                // Fetch Vendor Details
                 let vendorName = "Unknown Vendor";
                 let vendorPhone = "Not Available";
 
                 if (wsData.vendorId) {
                     const vendorDoc = await getDoc(doc(db, "users", wsData.vendorId));
                     if (vendorDoc.exists()) {
-                        const vData = vendorDoc.data();
-                        vendorName = vData.displayName || "Unknown Vendor";
-                        vendorPhone = vData.phoneNumber || "Not Available";
+                        vendorName = vendorDoc.data().displayName || "Unknown Vendor";
+                        vendorPhone = vendorDoc.data().phoneNumber || "Not Available";
                     }
                 }
 
-                // Fetch Registration Status
                 let status = "pending";
-                try {
-                    const q = query(
-                        collection(db, "registrations"),
-                        where("workshopId", "==", wsId),
-                        where("userId", "==", user?.uid)
-                    );
-                    const regSnap = await getDocs(q);
-                    if (!regSnap.empty) {
-                        status = regSnap.docs[0].data().status || "pending";
-                    }
-                } catch (err) {
-                    console.error("Error fetching registration status:", err);
+                let regId = undefined;
+                let refStatus = "none";
+
+                const q = query(
+                    collection(db, "registrations"),
+                    where("workshopId", "==", wsId),
+                    where("userId", "==", user?.uid)
+                );
+                const regSnap = await getDocs(q);
+                if (!regSnap.empty) {
+                    status = regSnap.docs[0].data().status || "pending";
+                    regId = regSnap.docs[0].id;
+                    refStatus = regSnap.docs[0].data().refundStatus || "none";
                 }
 
-                registered.push({
-                    ...wsData,
-                    id: wsDoc.id,
-                    vendorName,
-                    vendorPhone,
-                    status
-                });
+                registered.push({ ...wsData, id: wsDoc.id, vendorName, vendorPhone, status, registrationId: regId, refundStatus: refStatus, refundPolicy: wsData.refundPolicy });
             }
         }
         setRegisteredWorkshops(registered);
     };
 
+    const fetchCustomRequests = async () => {
+        if (!user) return;
+        const q = query(collection(db, "custom_requests"), where("userId", "==", user.uid));
+        const snap = await getDocs(q);
+        const reqs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setCustomRequests(reqs);
+    };
+
     const handleSave = async () => {
         if (!user) return;
         setSaving(true);
-
         try {
-            let photoURL = userData?.photoURL || "";
-
+            let photoURL = photoPreview;
             if (photo) {
                 const storageRef = ref(storage, `profile_photos/${user.uid}`);
                 await uploadBytes(storageRef, photo);
                 photoURL = await getDownloadURL(storageRef);
             }
 
-            // Update Auth Profile
-            await updateProfile(user, {
-                displayName: name,
-                photoURL: photoURL,
-            });
-
-            // Update Firestore
+            await updateProfile(user, { displayName: name, photoURL: photoURL });
             await updateDoc(doc(db, "users", user.uid), {
                 displayName: name,
                 phoneNumber: phone,
                 photoURL: photoURL,
-                ...(userData?.role === 'vendor' && { socialLink })
+                ...(userData?.role === 'vendor' && { socialLink, businessName })
             });
 
             setIsEditing(false);
-            window.location.reload();
+            router.refresh();
         } catch (error) {
-            console.error("Error updating profile:", error);
+            console.error(error);
             alert("Failed to update profile.");
         } finally {
             setSaving(false);
         }
-    };
-
-    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            setPhoto(e.target.files[0]);
-            setPhotoPreview(URL.createObjectURL(e.target.files[0]));
-        }
-    };
-
-    const handleRefund = (vendorPhone: string) => {
-        alert(`To request a refund, please contact the vendor at: ${vendorPhone}`);
     };
 
     const openReviewModal = (ws: RegisteredWorkshop) => {
@@ -196,380 +192,350 @@ export default function ProfilePage() {
 
     const handleSubmitReview = async () => {
         if (!selectedWorkshopForReview || !user) return;
-
         try {
-            // 1. Add Review to 'reviews' collection
             await addDoc(collection(db, "reviews"), {
                 workshopId: selectedWorkshopForReview.id,
                 userId: user.uid,
                 userName: userData?.displayName || "Anonymous",
                 rating: reviewRating,
                 comment: reviewComment,
-                createdAt: new Date().toISOString() // Use ISO string for easier sorting/display
+                createdAt: new Date().toISOString()
             });
 
-            // 2. Update Workshop Average Rating
-            const newRatingCount = (selectedWorkshopForReview.ratingCount || 0) + 1;
-            const currentTotal = (selectedWorkshopForReview.rating || 0) * (selectedWorkshopForReview.ratingCount || 0);
-            const newRating = (currentTotal + reviewRating) / newRatingCount;
+            const newCount = (selectedWorkshopForReview.ratingCount || 0) + 1;
+            const newRating = ((selectedWorkshopForReview.rating || 0) * (selectedWorkshopForReview.ratingCount || 0) + reviewRating) / newCount;
 
             await updateDoc(doc(db, "workshops", selectedWorkshopForReview.id), {
                 rating: newRating,
-                ratingCount: newRatingCount
+                ratingCount: newCount
             });
 
-            alert("Thank you for your review!");
             setReviewModalOpen(false);
-            fetchRegisteredWorkshops(); // Refresh list
+            fetchRegisteredWorkshops();
         } catch (error) {
-            console.error("Error submitting review:", error);
+            console.error(error);
             alert("Failed to submit review.");
         }
     };
 
-    // Filter Logic
-    const filteredFavorites = favorites.filter((w) => {
-        const matchesSearch = w.title.toLowerCase().includes(search.toLowerCase());
-        const matchesCategory = category === "All" || w.category === category;
-        const matchesLocation = location === "All" || w.location === location;
+    const filteredFavorites = favorites.filter(w =>
+        w.title.toLowerCase().includes(search.toLowerCase()) &&
+        (categoryFilter === "All" || w.category === categoryFilter)
+    );
 
-        const price = Number(w.price);
-        let matchesPrice = true;
-        if (priceRange === "0-2500") matchesPrice = price <= 2500;
-        if (priceRange === "2500-5000") matchesPrice = price > 2500 && price <= 5000;
-        if (priceRange === "5000-10000") matchesPrice = price > 5000 && price <= 10000;
-        if (priceRange === "10000+") matchesPrice = price > 10000;
-
-        return matchesSearch && matchesCategory && matchesLocation && matchesPrice;
-    });
-
-    if (loading) return <div className="min-h-screen pt-32 text-center text-white">Loading...</div>;
+    if (loading) return <div className="min-h-screen pt-32 text-center text-white font-black uppercase tracking-widest text-xs animate-pulse">Loading Profile...</div>;
 
     return (
-        <div className="min-h-screen pt-32 px-6 pb-20">
-            <div className="max-w-6xl mx-auto">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-[0_0_40px_rgba(56,189,248,0.15)] mb-12"
-                >
-                    <div className="flex flex-col md:flex-row gap-8 items-start">
-                        {/* Profile Image */}
-                        <div className="flex-shrink-0">
-                            <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white/10 relative group">
-                                {photoPreview ? (
-                                    <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full bg-gradient-to-br from-sky-500 to-indigo-500 flex items-center justify-center text-4xl font-bold text-white">
-                                        {name.charAt(0).toUpperCase()}
-                                    </div>
-                                )}
+        <div className="min-h-screen bg-background relative overflow-hidden pb-20 pt-28">
+            <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-primary/5 blur-[150px] -z-10 rounded-full animate-vibe-float" />
+            <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-indigo-500/5 blur-[120px] -z-10 rounded-full animate-vibe-float" style={{ animationDelay: '2s' }} />
 
-                                {isEditing && (
-                                    <label className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer">
-                                        <span className="text-white text-xs">Change</span>
-                                        <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-                                    </label>
-                                )}
-                            </div>
-                        </div>
+            <div className="max-w-7xl mx-auto px-6">
+                {/* Profile Header Card */}
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card shadow-3xl mb-12">
+                    <div className="flex flex-col lg:flex-row gap-12 items-center lg:items-start">
 
-                        {/* Profile Details */}
+
+                        {/* Info Section */}
                         <div className="flex-grow w-full">
-                            <div className="flex justify-between items-center mb-6">
-                                <h1 className="text-3xl font-bold text-white">
-                                    {userData?.role === 'vendor' ? 'Vendor Profile' : 'My Profile'}
-                                </h1>
-                                {!isEditing ? (
-                                    <button
-                                        onClick={() => setIsEditing(true)}
-                                        className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-semibold transition"
-                                    >
-                                        Edit Profile
-                                    </button>
-                                ) : (
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setIsEditing(false)}
-                                            className="px-4 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded-xl text-sm font-semibold transition"
-                                        >
-                                            Cancel
+                            <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-6 mb-10">
+                                <div className="text-center md:text-left">
+                                    <h1 className="text-4xl font-black text-foreground tracking-tighter uppercase leading-[0.8] mb-2">
+                                        {userData?.displayName || 'Unknown User'}
+                                    </h1>
+                                    <p className="text-muted-foreground font-bold text-[10px] uppercase tracking-widest">{user?.email}</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    {!isEditing ? (
+                                        <button onClick={() => setIsEditing(true)} className="btn-vibe-primary px-8 !py-3 !text-[10px]">
+                                            Edit Profile
                                         </button>
-                                        <button
-                                            onClick={handleSave}
-                                            disabled={saving}
-                                            className="px-4 py-2 bg-green-500/20 text-green-300 hover:bg-green-500/30 rounded-xl text-sm font-semibold transition"
-                                        >
-                                            {saving ? "Saving..." : "Save Changes"}
-                                        </button>
-                                    </div>
-                                )}
+                                    ) : (
+                                        <>
+                                            <button onClick={() => setIsEditing(false)} className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">Cancel</button>
+                                            <button onClick={handleSave} disabled={saving} className="btn-vibe-primary px-6 !py-3 !text-[10px]">{saving ? "Saving..." : "Save Changes"}</button>
+                                        </>
+                                    )}
+                                </div>
                             </div>
 
-                            <div className="grid gap-6 md:grid-cols-2">
-                                <div>
-                                    <label className="block text-gray-400 text-sm mb-1">Full Name</label>
+                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Full Name</label>
                                     {isEditing ? (
-                                        <input
-                                            type="text"
-                                            value={name}
-                                            onChange={(e) => setName(e.target.value)}
-                                            className="w-full px-4 py-2 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-white"
-                                        />
+                                        <input value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 bg-secondary/50 border border-border rounded-xl outline-none focus:border-primary transition-all font-bold text-sm text-foreground" placeholder="John Doe" />
                                     ) : (
-                                        <p className="text-xl text-white">{name}</p>
+                                        <p className="px-4 py-3 bg-card border border-border rounded-xl font-bold text-sm text-foreground">{name}</p>
                                     )}
                                 </div>
-
-                                <div>
-                                    <label className="block text-gray-400 text-sm mb-1">Email</label>
-                                    <p className="text-xl text-gray-300">{user?.email}</p>
-                                </div>
-
-                                <div>
-                                    <label className="block text-gray-400 text-sm mb-1">Phone Number</label>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Phone Number</label>
                                     {isEditing ? (
-                                        <input
-                                            type="tel"
-                                            value={phone}
-                                            onChange={(e) => setPhone(e.target.value)}
-                                            className="w-full px-4 py-2 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-white"
-                                        />
+                                        <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full px-4 py-3 bg-secondary/50 border border-border rounded-xl outline-none focus:border-primary transition-all font-bold text-sm text-foreground" placeholder="+91" />
                                     ) : (
-                                        <p className="text-xl text-white">{phone || "Not set"}</p>
+                                        <p className="px-4 py-3 bg-card border border-border rounded-xl font-bold text-sm text-foreground">{phone || "Not Set"}</p>
                                     )}
                                 </div>
-
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Email Address</label>
+                                    <p className="px-4 py-3 bg-card border border-border rounded-xl font-bold text-sm text-foreground opacity-70 cursor-not-allowed" title="Cannot be changed">{user?.email}</p>
+                                </div>
                                 {userData?.role === 'vendor' && (
-                                    <>
-                                        <div>
-                                            <label className="block text-gray-400 text-sm mb-1">Social Media</label>
-                                            {isEditing ? (
-                                                <input
-                                                    type="url"
-                                                    value={socialLink}
-                                                    onChange={(e) => setSocialLink(e.target.value)}
-                                                    className="w-full px-4 py-2 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-white"
-                                                />
-                                            ) : (
-                                                <a href={socialLink} target="_blank" rel="noopener noreferrer" className="text-xl text-sky-400 hover:underline truncate block">
-                                                    {socialLink || "Not set"}
-                                                </a>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <label className="block text-gray-400 text-sm mb-1">Business ID</label>
-                                            {businessIdUrl ? (
-                                                <a href={businessIdUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 rounded-xl text-sm hover:bg-white/20 transition">
-                                                    <i className="fa-solid fa-file-pdf text-red-400"></i> View Document
-                                                </a>
-                                            ) : (
-                                                <p className="text-gray-500">Not uploaded</p>
-                                            )}
-                                        </div>
-                                    </>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Social Link</label>
+                                        {isEditing ? (
+                                            <input value={socialLink} onChange={e => setSocialLink(e.target.value)} className="w-full px-4 py-3 bg-secondary/50 border border-border rounded-xl outline-none focus:border-primary transition-all font-bold text-sm text-foreground" placeholder="https://" />
+                                        ) : (
+                                            <a href={socialLink} target="_blank" className="px-4 py-3 bg-card border border-border rounded-xl font-bold text-sm text-primary hover:underline block truncate">{socialLink || "Not Set"}</a>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </div>
                     </div>
                 </motion.div>
 
-                {/* Registered Workshops Section (Users Only) */}
+                {/* Content Tabs / Sections */}
                 {userData?.role !== 'vendor' && (
-                    <div className="mb-16">
-                        <h2 className="text-3xl font-bold text-white mb-6">My Registrations</h2>
-
-                        {registeredWorkshops.length > 0 ? (
-                            <div className="overflow-x-auto bg-white/5 border border-white/10 rounded-2xl">
-                                <table className="w-full text-left text-gray-300">
-                                    <thead className="bg-white/5 text-gray-400 uppercase text-xs">
-                                        <tr>
-                                            <th className="px-6 py-4">Workshop</th>
-                                            <th className="px-6 py-4">Vendor</th>
-                                            <th className="px-6 py-4">Price</th>
-                                            <th className="px-6 py-4">Date</th>
-                                            <th className="px-6 py-4">Status</th>
-                                            <th className="px-6 py-4">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/5">
-                                        {registeredWorkshops.map((ws) => (
-                                            <tr key={ws.id} className="hover:bg-white/5 transition">
-                                                <td className="px-6 py-4 font-medium text-white">{ws.title}</td>
-                                                <td className="px-6 py-4">{ws.vendorName}</td>
-                                                <td className="px-6 py-4 text-sky-300">Rs. {ws.price.toLocaleString()}</td>
-                                                <td className="px-6 py-4">{new Date(ws.date).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${ws.status === 'approved' ? 'bg-green-500/20 text-green-400' :
-                                                        ws.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
-                                                            'bg-yellow-500/20 text-yellow-400'
-                                                        }`}>
-                                                        {ws.status ? ws.status.toUpperCase() : "PENDING"}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <button
-                                                        onClick={() => openReviewModal(ws)}
-                                                        className="px-4 py-2 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 rounded-lg text-sm font-semibold transition flex items-center gap-2"
-                                                    >
-                                                        <i className="fa-solid fa-star"></i> Rate & Review
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                    <div className="space-y-16">
+                        {/* Registrations */}
+                        <section>
+                            <div className="flex items-center gap-4 mb-8">
+                                <i className="fa-solid fa-ticket text-primary text-xl"></i>
+                                <h2 className="text-2xl font-black text-foreground tracking-tighter uppercase">My Registrations</h2>
                             </div>
-                        ) : (
-                            <div className="text-center py-8 bg-white/5 rounded-2xl border border-white/10 text-gray-400">
-                                You haven't registered for any workshops yet.
-                            </div>
-                        )}
-                    </div>
-                )}
 
-                {/* Favorites Section (Users Only) */}
-                {userData?.role !== 'vendor' && (
-                    <div>
-                        <h2 className="text-3xl font-bold text-white mb-8">My Favorites</h2>
+                            {registeredWorkshops.length > 0 ? (
+                                <div className="grid lg:grid-cols-2 gap-6">
+                                    {registeredWorkshops.map((ws) => (
+                                        <div key={ws.id} className="glass-card flex flex-col sm:flex-row gap-6 p-6 group hover:bg-white/5 transition-all duration-500 relative overflow-hidden">
+                                            {/* Status Badge */}
+                                            <div className="absolute top-4 right-4 z-10">
+                                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border backdrop-blur-md shadow-xl ${ws.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                                    ws.status === 'refunded' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                                        'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                                    }`}>
+                                                    {ws.status}
+                                                </span>
+                                            </div>
 
-                        {/* Filter Bar */}
-                        <div className="bg-white/5 border border-white/10 p-4 rounded-2xl mb-8 flex flex-wrap gap-4">
-                            <input
-                                type="text"
-                                placeholder="Search favorites..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="px-4 py-2 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-white placeholder-gray-400 flex-grow"
-                            />
 
-                            <select value={category} onChange={(e) => setCategory(e.target.value)} className="px-4 py-2 bg-white/10 border border-white/10 rounded-xl text-white">
-                                <option value="All">Category</option>
-                                <option value="Art">Art</option>
-                                <option value="Music">Music</option>
-                                <option value="Technology">Technology</option>
-                                <option value="Cooking">Cooking</option>
-                                <option value="Sports">Sports</option>
-                            </select>
 
-                            <select value={location} onChange={(e) => setLocation(e.target.value)} className="px-4 py-2 bg-white/10 border border-white/10 rounded-xl text-white">
-                                <option value="All">Location</option>
-                                {[...new Set(favorites.map((w) => w.location))].map((loc) => (
-                                    <option key={loc} value={loc}>{loc}</option>
-                                ))}
-                            </select>
-
-                            <select value={priceRange} onChange={(e) => setPriceRange(e.target.value)} className="px-4 py-2 bg-white/10 border border-white/10 rounded-xl text-white">
-                                <option value="All">Price</option>
-                                <option value="0-2500">0 - 2,500</option>
-                                <option value="2500-5000">2,500 - 5,000</option>
-                                <option value="5000-10000">5,000 - 10,000</option>
-                                <option value="10000+">10,000+</option>
-                            </select>
-                        </div>
-
-                        {filteredFavorites.length > 0 ? (
-                            <motion.div layout className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                                <AnimatePresence>
-                                    {filteredFavorites.map((w) => (
-                                        <motion.div
-                                            layout
-                                            initial={{ opacity: 0, scale: 0.9 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            exit={{ opacity: 0, scale: 0.9 }}
-                                            key={w.id}
-                                            className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/10 transition group"
-                                        >
-                                            <div className="relative h-40 mb-4 overflow-hidden rounded-xl">
-                                                {w.imageUrl ? (
-                                                    <img src={w.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition duration-500" />
-                                                ) : (
-                                                    <div className="w-full h-full bg-white/10 flex items-center justify-center">
-                                                        <i className="fa-solid fa-image text-gray-500"></i>
+                                            <div className="flex-grow min-w-0 flex flex-col justify-between py-1">
+                                                <div>
+                                                    <h3 className="text-xl font-black text-foreground uppercase tracking-tighter truncate mb-2 group-hover:text-primary transition-colors">{ws.title}</h3>
+                                                    <div className="flex flex-wrap gap-x-6 gap-y-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-4">
+                                                        <span className="flex items-center gap-2"><i className="fa-solid fa-calendar text-primary"></i> {new Date(ws.date).toLocaleDateString()}</span>
+                                                        <span className="flex items-center gap-2"><i className="fa-solid fa-user-tie text-indigo-500"></i> {ws.vendorName}</span>
                                                     </div>
-                                                )}
-                                                <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-md px-2 py-1 rounded-lg text-xs text-white">
-                                                    {w.category}
+                                                </div>
+
+                                                <div className="flex flex-wrap items-center gap-3 mt-auto">
+                                                    <button onClick={() => openReviewModal(ws)} className="btn-vibe-secondary !text-[9px] !py-2 !px-4 flex items-center gap-2">
+                                                        <i className="fa-solid fa-star"></i> Review
+                                                    </button>
+
+                                                    {(ws.status === 'paid' || ws.status === 'pending' || ws.status === 'approved') && ws.refundStatus === 'none' && (
+                                                        <button onClick={async () => {
+                                                            const policy = ws.refundPolicy || "Refunds are done outside the site. Contact vendor directly.";
+                                                            if (confirm(`REFUND POLICY:\n${policy}\n\nHave you contacted the vendor and wish to mark this as 'Refund Requested'?`)) {
+                                                                const { requestRefund } = await import('@/firebase/refundActions');
+                                                                if (ws.registrationId) { await requestRefund(ws.registrationId); fetchRegisteredWorkshops(); }
+                                                            }
+                                                        }} className="px-4 py-2 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 group/refund">
+                                                            <i className="fa-solid fa-rotate-left group-hover/refund:-rotate-45 transition-transform"></i>
+                                                            Ask for Refund
+                                                        </button>
+                                                    )}
+
+                                                    {ws.refundStatus === 'refund_requested' && (
+                                                        <span className="px-4 py-2 bg-amber-500/5 border border-amber-500/20 text-amber-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                            <i className="fa-solid fa-clock-rotate-left animate-spin-slow"></i>
+                                                            Refund Requested
+                                                        </span>
+                                                    )}
+
+                                                    {ws.refundStatus === 'vendor_proof_uploaded' && (
+                                                        <div className="flex flex-col gap-2 items-end">
+                                                            <span className="text-[9px] font-black uppercase text-emerald-500 tracking-widest">Vendor Refunded</span>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        const { confirmRefundReceipt } = await import('@/firebase/refundActions');
+                                                                        if (ws.registrationId) { await confirmRefundReceipt(ws.registrationId, true); fetchRegisteredWorkshops(); }
+                                                                    }}
+                                                                    className="px-3 py-1 bg-emerald-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 shadow-lg shadow-emerald-500/20"
+                                                                >
+                                                                    Received
+                                                                </button>
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        const { confirmRefundReceipt } = await import('@/firebase/refundActions');
+                                                                        if (ws.registrationId) { await confirmRefundReceipt(ws.registrationId, false); fetchRegisteredWorkshops(); }
+                                                                    }}
+                                                                    className="px-3 py-1 bg-red-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-red-600 shadow-lg shadow-red-500/20"
+                                                                >
+                                                                    Not Received
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {ws.refundStatus === 'participant_confirmed' && (
+                                                        <span className="px-4 py-2 bg-emerald-500/5 border border-emerald-500/20 text-emerald-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                            <i className="fa-solid fa-check-double"></i>
+                                                            Confirmed
+                                                        </span>
+                                                    )}
+
+                                                    {ws.refundStatus === 'participant_disputed' && (
+                                                        <span className="px-4 py-2 bg-red-500/5 border border-red-500/20 text-red-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                            <i className="fa-solid fa-triangle-exclamation"></i>
+                                                            Disputed
+                                                        </span>
+                                                    )}
+
+                                                    {ws.status === 'refunded' && (
+                                                        <span className="px-4 py-2 bg-red-500/5 border border-red-500/20 text-red-500/70 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                            <i className="fa-solid fa-ban"></i>
+                                                            Refunded
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
-
-                                            <h3 className="text-lg font-semibold text-sky-300 mb-1 truncate">{w.title}</h3>
-                                            <div className="flex justify-between text-sm text-gray-400 mb-3">
-                                                <span>{new Date(w.date).toLocaleDateString()}</span>
-                                                <span>{w.location}</span>
-                                            </div>
-
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-white font-bold">Rs. {w.price.toLocaleString()}</span>
-                                                <Link href={`/register/${w.id}`} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-white transition">
-                                                    View
-                                                </Link>
-                                            </div>
-                                        </motion.div>
+                                        </div>
                                     ))}
-                                </AnimatePresence>
-                            </motion.div>
-                        ) : (
-                            <div className="text-center py-12 bg-white/5 rounded-3xl border border-white/10">
-                                <i className="fa-regular fa-heart text-4xl text-gray-600 mb-4"></i>
-                                <p className="text-gray-400">No favorites found matching your filters.</p>
+                                </div>
+                            ) : (
+                                <div className="glass-card py-20 text-center">
+                                    <p className="text-muted-foreground font-black text-[10px] uppercase tracking-widest">No active workshops found.</p>
+                                </div>
+                            )}
+                        </section>
+
+                        {/* Custom Requests */}
+                        <section>
+                            <div className="flex items-center gap-4 mb-8">
+                                <i className="fa-solid fa-wand-magic-sparkles text-primary text-xl"></i>
+                                <h2 className="text-2xl font-black text-foreground tracking-tighter uppercase">My Custom Requests</h2>
                             </div>
-                        )}
+
+                            {customRequests.length > 0 ? (
+                                <div className="grid lg:grid-cols-2 gap-6">
+                                    {customRequests.map((req) => (
+                                        <div key={req.id} className="glass-card flex flex-col gap-4 p-6 relative overflow-hidden group hover:border-primary/30 transition-all">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border mb-3 inline-block ${req.status === 'accepted' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                                            req.status === 'rejected' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                                                'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                                        }`}>
+                                                        {req.status}
+                                                    </span>
+                                                    <h3 className="text-xl font-black text-foreground uppercase tracking-tighter leading-none mb-1">{req.topic}</h3>
+                                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                                                        Budget: LKR {req.budget} • {req.vendorId === 'all' ? 'Open Request' : 'Direct Request'}
+                                                    </p>
+                                                </div>
+                                                {req.pdfUrl && (
+                                                    <a href={req.pdfUrl} target="_blank" className="w-8 h-8 rounded-lg bg-secondary hover:bg-primary hover:text-white flex items-center justify-center transition-all text-muted-foreground">
+                                                        <i className="fa-solid fa-file-pdf"></i>
+                                                    </a>
+                                                )}
+                                            </div>
+                                            <div className="pt-4 border-t border-white/5 flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">
+                                                    {req.createdAt?.seconds ? new Date(req.createdAt.seconds * 1000).toLocaleDateString() : 'Just now'}
+                                                </span>
+                                                {req.status === 'accepted' && (
+                                                    <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+                                                        <i className="fa-solid fa-check-circle"></i> Vendor Accepted
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="glass-card py-20 text-center flex flex-col items-center gap-4">
+                                    <p className="text-muted-foreground font-black text-[10px] uppercase tracking-widest">No custom requests found.</p>
+                                    <Link href="/custom-request" className="px-6 py-3 bg-secondary hover:bg-primary/20 hover:text-primary text-muted-foreground rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">
+                                        Create New Request
+                                    </Link>
+                                </div>
+                            )}
+                        </section>
+
+                        {/* Favorites */}
+                        <section>
+                            <div className="flex justify-between items-center mb-8">
+                                <div className="flex items-center gap-4">
+                                    <i className="fa-solid fa-heart text-primary text-xl"></i>
+                                    <h2 className="text-2xl font-black text-foreground tracking-tighter uppercase">My Favorites</h2>
+                                </div>
+                                <div className="flex gap-4">
+                                    <input placeholder="Search favorites..." value={search} onChange={e => setSearch(e.target.value)} className="bg-white/5 border border-white/10 px-4 py-2 rounded-xl text-[10px] font-bold text-white outline-none focus:border-primary transition-all w-48" />
+                                </div>
+                            </div>
+
+                            {filteredFavorites.length > 0 ? (
+                                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    {filteredFavorites.map((w) => (
+                                        <Link href={`/register/${w.id}`} key={w.id} className="glass-card !p-0 group hover:border-primary/30 transition-all overflow-hidden flex flex-col bg-card/60">
+                                            <div className="h-32 w-full relative overflow-hidden bg-secondary/50">
+                                                {w.imageBase64 || w.imageUrl ? (
+                                                    <img src={w.imageBase64 || w.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                                ) : (
+                                                    <div className="flex items-center justify-center h-full text-muted-foreground"><i className="fa-solid fa-image text-2xl"></i></div>
+                                                )}
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-60" />
+                                                <div className="absolute bottom-3 left-3">
+                                                    <span className="text-[9px] font-black uppercase text-white bg-primary/20 backdrop-blur-md border border-primary/30 px-2 py-1 rounded-lg tracking-widest">{w.category}</span>
+                                                </div>
+                                            </div>
+                                            <div className="p-4 flex flex-col gap-1">
+                                                <h3 className="text-sm font-black text-foreground uppercase tracking-tighter truncate group-hover:text-primary transition-colors">{w.title}</h3>
+                                                <div className="flex justify-between items-center mt-2">
+                                                    <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1"><i className="fa-solid fa-location-dot"></i> {w.location || "Online"}</span>
+                                                    <span className="text-[10px] font-black text-emerald-500 uppercase">Rs. {w.price}</span>
+                                                </div>
+                                            </div>
+                                        </Link>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="glass-card py-20 text-center">
+                                    <p className="text-muted-foreground font-black text-[10px] uppercase tracking-widest">No favorites saved.</p>
+                                </div>
+                            )}
+                        </section>
                     </div>
                 )}
-                {/* Review Modal */}
-                <AnimatePresence>
-                    {reviewModalOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.9 }}
-                                className="bg-[#0f172a] border border-white/20 p-8 rounded-3xl w-full max-w-md shadow-2xl"
-                            >
-                                <h3 className="text-2xl font-bold text-white mb-6 text-center">Rate & Review</h3>
-
-                                <div className="flex justify-center gap-2 mb-6">
-                                    {[1, 2, 3, 4, 5].map((star) => (
-                                        <button
-                                            key={star}
-                                            onClick={() => setReviewRating(star)}
-                                            className="text-3xl transition hover:scale-110 focus:outline-none"
-                                        >
-                                            <i className={`${star <= reviewRating ? "fa-solid text-yellow-400" : "fa-regular text-gray-600"} fa-star`}></i>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <div className="mb-6">
-                                    <label className="block text-gray-400 text-sm mb-2">Your Review</label>
-                                    <textarea
-                                        value={reviewComment}
-                                        onChange={(e) => setReviewComment(e.target.value)}
-                                        className="w-full px-4 py-3 bg-white/5 text-white rounded-xl border border-white/10 focus:border-sky-500 outline-none transition h-32 resize-none"
-                                        placeholder="Share your experience..."
-                                    ></textarea>
-                                </div>
-
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => setReviewModalOpen(false)}
-                                        className="flex-1 py-3 text-gray-400 hover:text-white transition font-semibold bg-white/5 rounded-xl hover:bg-white/10"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleSubmitReview}
-                                        className="flex-1 py-3 bg-gradient-to-r from-sky-500 to-indigo-500 text-white rounded-xl font-bold shadow-[0_0_20px_rgba(56,189,248,0.4)] hover:shadow-[0_0_30px_rgba(56,189,248,0.6)] hover:scale-105 transition"
-                                    >
-                                        Submit Review
-                                    </button>
-                                </div>
-                            </motion.div>
-                        </div>
-                    )}
-                </AnimatePresence>
             </div>
+
+            {/* Review Modal */}
+            <AnimatePresence>
+                {reviewModalOpen && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setReviewModalOpen(false)} className="absolute inset-0 bg-background/80 backdrop-blur-md" />
+                        <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="glass-card !p-10 w-full max-w-md relative z-10 shadow-3xl">
+                            <h3 className="text-2xl font-black text-foreground uppercase tracking-tighter mb-8 text-center">Write a Review</h3>
+                            <div className="flex justify-center gap-3 mb-8">
+                                {[1, 2, 3, 4, 5].map(s => (
+                                    <button key={s} onClick={() => setReviewRating(s)} className={`text-2xl transition-all hover:scale-110 ${s <= reviewRating ? 'text-primary' : 'text-white/10'}`}>
+                                        <i className="fa-solid fa-star"></i>
+                                    </button>
+                                ))}
+                            </div>
+                            <textarea value={reviewComment} onChange={e => setReviewComment(e.target.value)} placeholder="Write your review here..." className="w-full h-32 bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold text-sm outline-none focus:border-primary transition-all mb-8 resize-none" />
+                            <div className="grid grid-cols-2 gap-4">
+                                <button onClick={() => setReviewModalOpen(false)} className="px-6 py-4 bg-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">Cancel</button>
+                                <button onClick={handleSubmitReview} className="btn-vibe-primary !py-4 !text-[10px]">Submit Review</button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
