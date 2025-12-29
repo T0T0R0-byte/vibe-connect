@@ -4,10 +4,11 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { db } from "@/firebase/firebaseConfig";
-import { collection, getDocs, query, where, doc, updateDoc, arrayUnion, arrayRemove, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import Link from "next/link";
 import { useAuth } from "@/app/context/AuthContext";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AnimatedBackground } from "@/app/components/AnimatedBackground";
 
 interface Workshop {
   id: string;
@@ -23,358 +24,483 @@ interface Workshop {
   ageGroup: string;
   rating?: number;
   ratingCount?: number;
-  ratings?: Record<string, number>; // Map of userId -> rating
+  ratings?: Record<string, number>;
 }
 
 interface Vendor {
   id: string;
-  name: string;
+  displayName: string;
+  businessName?: string;
+  customOrdersEnabled?: boolean;
+  phoneNumber?: string;
+  socialLink?: string;
 }
+
+const CATEGORIES = ["All", "Art", "Music", "Technology", "Cooking", "Sports", "Business", "Health", "Other"];
 
 function WorkshopsPage() {
   const { user, userData } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [vendors, setVendors] = useState<Record<string, Vendor>>({});
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All");
-  const [location, setLocation] = useState("All");
-  const [priceRange, setPriceRange] = useState("All");
-  const [ageGroup, setAgeGroup] = useState("All");
-  const [ratingFilter, setRatingFilter] = useState("All");
-  const [vendorFilter, setVendorFilter] = useState("All");
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [activePriceRange, setActivePriceRange] = useState("All");
+  const [activeAgeGroup, setActiveAgeGroup] = useState("All");
+  const [activeDate, setActiveDate] = useState("");
+  const [activeLocation, setActiveLocation] = useState("All");
+  const [showCustomOnly, setShowCustomOnly] = useState(false);
+  const [localFavorites, setLocalFavorites] = useState<string[]>([]);
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+
+  useEffect(() => {
+    const category = searchParams?.get("category");
+    if (category && CATEGORIES.includes(category)) {
+      setActiveCategory(category);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const fetchData = async () => {
       const workshopSnap = await getDocs(collection(db, "workshops"));
-      const workshopList = workshopSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Workshop[];
-
+      const workshopList = workshopSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Workshop[];
       setWorkshops(workshopList);
 
-      const vendorQuery = query(
-        collection(db, "users"),
-        where("role", "==", "vendor")
-      );
-      const vendorSnap = await getDocs(vendorQuery);
-
-      const vendorList = vendorSnap.docs.reduce((acc, doc) => {
-        acc[doc.id] = doc.data() as Vendor;
+      const vQuery = query(collection(db, "users"), where("role", "==", "vendor"));
+      const vSnap = await getDocs(vQuery);
+      const vList = vSnap.docs.reduce((acc, doc) => {
+        const data = doc.data();
+        acc[doc.id] = {
+          id: doc.id,
+          displayName: data.displayName,
+          businessName: data.businessName,
+          customOrdersEnabled: data.customOrdersEnabled,
+          phoneNumber: data.phoneNumber,
+          socialLink: data.socialLink
+        };
         return acc;
       }, {} as Record<string, Vendor>);
 
-      setVendors(vendorList);
+      setVendors(vList);
       setLoading(false);
     };
-
     fetchData();
   }, []);
 
-  const [localFavorites, setLocalFavorites] = useState<string[]>([]);
-
   useEffect(() => {
-    if (userData?.favorites) {
-      setLocalFavorites(userData.favorites);
-    }
+    if (userData?.favorites) setLocalFavorites(userData.favorites);
   }, [userData]);
 
-  // ... (fetchData effect remains same)
-
-  const toggleFavorite = async (workshopId: string) => {
+  const toggleFavorite = async (wId: string) => {
     if (!user) {
-      alert("Please login to add to favorites.");
+      router.push("/login");
       return;
     }
-
-    const isFav = localFavorites.includes(workshopId);
-
-    // Optimistic Update
-    setLocalFavorites(prev => isFav ? prev.filter(id => id !== workshopId) : [...prev, workshopId]);
-
-    const userRef = doc(db, "users", user.uid);
-
+    const isFav = localFavorites.includes(wId);
+    setLocalFavorites(p => isFav ? p.filter(id => id !== wId) : [...p, wId]);
     try {
-      if (isFav) {
-        await updateDoc(userRef, {
-          favorites: arrayRemove(workshopId),
-        });
-      } else {
-        await updateDoc(userRef, {
-          favorites: arrayUnion(workshopId),
-        });
-      }
-    } catch (error) {
-      console.error("Error toggling favorite:", error);
-      // Revert on error
-      setLocalFavorites(prev => isFav ? [...prev, workshopId] : prev.filter(id => id !== workshopId));
-    }
-  };
-
-  const handleRegisterClick = (e: React.MouseEvent, workshopId: string) => {
-    if (!user) {
-      e.preventDefault();
-      alert("Register or login to register for a workshop");
-      // Optionally redirect to login
-      // router.push("/login"); 
-    }
-  };
-
-  const handleRate = async (workshopId: string, rating: number) => {
-    if (!user) return;
-
-    // Update workshop rating
-    // We need to store individual ratings to calculate average correctly.
-    // Assuming 'ratings' field is a map { userId: rating }
-
-    try {
-      const workshopRef = doc(db, "workshops", workshopId);
-      const workshop = workshops.find(w => w.id === workshopId);
-      if (!workshop) return;
-
-      const currentRatings = workshop.ratings || {};
-      currentRatings[user.uid] = rating;
-
-      const values = Object.values(currentRatings);
-      const avg = values.reduce((a, b) => a + b, 0) / values.length;
-
-      await updateDoc(workshopRef, {
-        ratings: currentRatings,
-        rating: avg,
-        ratingCount: values.length
-      });
-
-      // Update local state
-      setWorkshops(prev => prev.map(w => w.id === workshopId ? { ...w, ratings: currentRatings, rating: avg, ratingCount: values.length } : w));
-
-    } catch (error) {
-      console.error("Error rating workshop:", error);
+      const uRef = doc(db, "users", user.uid);
+      await updateDoc(uRef, { favorites: isFav ? arrayRemove(wId) : arrayUnion(wId) });
+    } catch (e) {
+      setLocalFavorites(p => isFav ? [...p, wId] : p.filter(id => id !== wId));
     }
   };
 
   const filtered = workshops.filter((w) => {
     const matchesSearch = w.title.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = category === "All" || w.category === category;
-    const matchesVendor = vendorFilter === "All" || w.vendorId === vendorFilter;
-    const matchesLocation = location === "All" || w.location === location;
-    const matchesAge = ageGroup === "All" || w.ageGroup === ageGroup;
+    const matchesCategory = activeCategory === "All" || w.category === activeCategory;
+    const matchesAge = activeAgeGroup === "All" || (w.ageGroup || "").includes(activeAgeGroup);
+    const matchesLocation = activeLocation === "All" || w.location === activeLocation;
+    const matchesDate = !activeDate || w.date === activeDate;
 
-    const price = Number(w.price);
     let matchesPrice = true;
+    const p = Number(w.price);
+    if (activePriceRange === "0-5000") matchesPrice = p <= 5000;
+    else if (activePriceRange === "5000-15000") matchesPrice = p > 5000 && p <= 15000;
+    else if (activePriceRange === "15000+") matchesPrice = p > 15000;
 
-    if (priceRange === "0-2500") matchesPrice = price <= 2500;
-    if (priceRange === "2500-5000") matchesPrice = price > 2500 && price <= 5000;
-    if (priceRange === "5000-10000") matchesPrice = price > 5000 && price <= 10000;
-    if (priceRange === "10000-20000") matchesPrice = price > 10000 && price <= 20000;
-    if (priceRange === "20000-30000") matchesPrice = price > 20000 && price <= 30000;
-    if (priceRange === "30000+") matchesPrice = price > 30000;
+    const matchesCustom = !showCustomOnly || vendors[w.vendorId]?.customOrdersEnabled;
 
-    const matchesRating =
-      ratingFilter === "All" || (w.rating || 0) >= Number(ratingFilter);
-
-    return (
-      matchesSearch &&
-      matchesCategory &&
-      matchesVendor &&
-      matchesLocation &&
-      matchesAge &&
-      matchesPrice &&
-      matchesRating
-    );
+    return matchesSearch && matchesCategory && matchesAge && matchesPrice && matchesCustom && matchesDate && matchesLocation;
   });
 
+  const uniqueLocations = Array.from(new Set(workshops.map(w => w.location))).filter(Boolean);
+
   return (
-    <main className="min-h-screen px-6 py-28 text-gray-100">
-      {/* ... (Header and Filters remain same) */}
-      <motion.h1
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center text-6xl font-extrabold mb-12 bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent"
-      >
-        Explore Workshops
-      </motion.h1>
+    <main className="min-h-screen pt-32 pb-24 px-6 relative overflow-hidden bg-background">
+      {/* Immersive Atmosphere */}
+      <div className="absolute top-0 right-1/4 w-[800px] h-[800px] bg-primary/5 blur-[150px] -z-10 rounded-full animate-vibe-float" />
+      <div className="absolute bottom-0 left-1/4 w-[600px] h-[600px] bg-indigo-500/5 blur-[120px] -z-10 rounded-full animate-vibe-float" style={{ animationDelay: '2s' }} />
 
-      <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-6 rounded-3xl mb-16 shadow-[0_0_25px_rgba(56,189,248,0.15)] flex flex-wrap justify-center gap-4">
-        {/* ... (Inputs and Selects remain same - I will just copy them to be safe or use ... if I can but I must replace the whole block if I use replace_file_content) */}
-        <input
-          type="text"
-          placeholder="Search workshops..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="px-4 py-3 w-64 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
-        />
+      <div className="max-w-7xl mx-auto space-y-16">
 
-        <select value={category} onChange={(e) => setCategory(e.target.value)} className="px-4 py-3 bg-white/10 border border-white/10 rounded-xl">
-          <option value="All">Category</option>
-          <option value="Art">Art</option>
-          <option value="Music">Music</option>
-          <option value="Technology">Technology</option>
-          <option value="Cooking">Cooking</option>
-          <option value="Sports">Sports</option>
-        </select>
+        <div className="relative mb-20 py-20 px-6 rounded-[3rem] overflow-hidden">
+          <AnimatedBackground />
+          <div className="relative z-10 text-center space-y-6 max-w-4xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md shadow-lg"
+            >
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_10px_currentColor] text-primary" />
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/80">
+                Explore The Vibe
+              </span>
+            </motion.div>
 
-        <select value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)} className="px-4 py-3 bg-white/10 border border-white/10 rounded-xl">
-          <option value="All">Vendor</option>
-          {Object.entries(vendors).map(([id, vendor]) => (
-            <option key={id} value={id}>
-              {vendor.name}
-            </option>
-          ))}
-        </select>
+            <motion.h1
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-6xl md:text-8xl font-black tracking-tighter text-foreground leading-[0.9]"
+            >
+              Discover <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-indigo-500 to-purple-500 animate-gradient-x">
+                New Experiences.
+              </span>
+            </motion.h1>
 
-        <select value={ageGroup} onChange={(e) => setAgeGroup(e.target.value)} className="px-4 py-3 bg-white/10 border border-white/10 rounded-xl">
-          <option value="All">Age Group</option>
-          <option value="Kids">Kids</option>
-          <option value="Teans">Teens</option>
-          <option value="Adults">Adults</option>
-        </select>
-
-        <select value={location} onChange={(e) => setLocation(e.target.value)} className="px-4 py-3 bg-white/10 border border-white/10 rounded-xl">
-          <option value="All">Location</option>
-          {[...new Set(workshops.map((w) => w.location))].map((loc) => (
-            <option key={loc}>{loc}</option>
-          ))}
-        </select>
-
-        <select value={priceRange} onChange={(e) => setPriceRange(e.target.value)} className="px-4 py-3 bg-white/10 border border-white/10 rounded-xl">
-          <option value="All">Price (Rs.)</option>
-          <option value="0-2500">Rs. 0 – 2,500</option>
-          <option value="2500-5000">Rs. 2,500 – 5,000</option>
-          <option value="5000-10000">Rs. 5,000 – 10,000</option>
-          <option value="10000-20000">Rs. 10,000 – 20,000</option>
-          <option value="20000-30000">Rs. 20,000 – 30,000</option>
-          <option value="30000+">Rs. 30,000+</option>
-        </select>
-
-        <select value={ratingFilter} onChange={(e) => setRatingFilter(e.target.value)} className="px-4 py-3 bg-white/10 border border-white/10 rounded-xl">
-          <option value="All">Min Rating</option>
-          <option value="1">⭐ 1+</option>
-          <option value="2">⭐ 2+</option>
-          <option value="3">⭐ 3+</option>
-          <option value="4">⭐ 4+</option>
-          <option value="5">⭐ 5</option>
-        </select>
-      </div>
-
-      {loading ? (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-12">
-          {[1, 2, 3, 4, 5, 6].map((n) => (
-            <div key={n} className="bg-white/5 border border-white/10 rounded-3xl p-6 h-[500px] animate-pulse">
-              <div className="w-full h-56 bg-white/10 rounded-2xl mb-5"></div>
-              <div className="h-8 bg-white/10 rounded w-3/4 mb-4"></div>
-              <div className="h-4 bg-white/10 rounded w-1/2 mb-4"></div>
-              <div className="h-20 bg-white/10 rounded w-full mb-4"></div>
-            </div>
-          ))}
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="text-muted-foreground font-medium text-lg md:text-xl max-w-2xl mx-auto leading-relaxed"
+            >
+              Join the collective. Master new skills. Connect with visionary mentors in a world built for creators.
+            </motion.p>
+          </div>
         </div>
-      ) : (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-12">
-          <AnimatePresence>
-            {filtered.map((w, i) => {
-              const isRegistered = userData?.registeredWorkshops?.includes(w.id);
-              const isFavorite = localFavorites.includes(w.id);
-              const userRating = w.ratings?.[user?.uid || ""] || 0;
 
-              return (
-                <motion.div
-                  key={w.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="group relative bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 hover:scale-[1.03] hover:shadow-[0_0_30px_rgba(56,189,248,0.25)] transition-all flex flex-col"
-                >
-                  {/* Favorite Button */}
-                  <button
-                    onClick={() => toggleFavorite(w.id)}
-                    className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 hover:bg-black/60 transition hover:scale-110"
+        {/* Refined Filter Infrastructure */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          {/* Main Search & Reset Link */}
+          <div className="flex flex-col md:flex-row gap-6">
+            <div className="relative flex-1 group">
+              <i className="fa-solid fa-search absolute left-6 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors"></i>
+              <input
+                placeholder="Search by title, artist, or vibe..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-14 pr-8 py-4 bg-card border border-border rounded-xl outline-none font-bold text-sm focus:border-primary/40 focus:ring-4 focus:ring-primary/5 transition-all shadow-xl"
+              />
+            </div>
+
+            {(search || activeCategory !== 'All' || activePriceRange !== 'All' || activeAgeGroup !== 'All' || showCustomOnly || activeDate || activeLocation !== 'All') && (
+              <button
+                onClick={() => { setSearch(""); setActiveCategory("All"); setActivePriceRange("All"); setActiveAgeGroup("All"); setShowCustomOnly(false); setActiveDate(""); setActiveLocation("All"); }}
+                className="px-6 py-4 bg-secondary hover:bg-red-500/10 hover:text-red-500 text-muted-foreground rounded-xl text-xs font-bold uppercase tracking-widest transition-all border border-border/50 flex items-center gap-2 justify-center"
+              >
+                <i className="fa-solid fa-rotate-right"></i>
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {/* Category Select */}
+            <div className="relative group">
+              <select
+                value={activeCategory}
+                onChange={(e) => setActiveCategory(e.target.value)}
+                className="w-full bg-card border border-border rounded-xl pl-4 pr-10 py-3 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary/40 text-foreground appearance-none cursor-pointer shadow-sm hover:border-primary/30"
+              >
+                {CATEGORIES.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+              <i className="fa-solid fa-layer-group absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none group-hover:text-primary transition-colors"></i>
+            </div>
+
+            {/* Date Input */}
+            <input
+              type="date"
+              value={activeDate}
+              onChange={(e) => setActiveDate(e.target.value)}
+              className="w-full bg-card border border-border rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary/40 text-foreground placeholder:text-muted-foreground shadow-sm hover:border-primary/30"
+            />
+
+            {/* Location Select */}
+            <div className="relative group">
+              <select
+                value={activeLocation}
+                onChange={(e) => setActiveLocation(e.target.value)}
+                className="w-full bg-card border border-border rounded-xl pl-4 pr-10 py-3 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary/40 text-foreground appearance-none cursor-pointer shadow-sm hover:border-primary/30"
+              >
+                <option value="All">All Locations</option>
+                {uniqueLocations.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+              <i className="fa-solid fa-location-dot absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none group-hover:text-primary transition-colors"></i>
+            </div>
+
+            {/* Price Select */}
+            <div className="relative group">
+              <select
+                value={activePriceRange}
+                onChange={(e) => setActivePriceRange(e.target.value)}
+                className="w-full bg-card border border-border rounded-xl pl-4 pr-10 py-3 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary/40 text-foreground appearance-none cursor-pointer shadow-sm hover:border-primary/30"
+              >
+                <option value="All">All Prices</option>
+                <option value="0-5000">Under Rs. 5k</option>
+                <option value="5000-15000">Rs. 5k - 15k</option>
+                <option value="15000+">Premium (15k+)</option>
+              </select>
+              <i className="fa-solid fa-tag absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none group-hover:text-primary transition-colors"></i>
+            </div>
+
+            {/* Age Group Select */}
+            <div className="relative group">
+              <select
+                value={activeAgeGroup}
+                onChange={(e) => setActiveAgeGroup(e.target.value)}
+                className="w-full bg-card border border-border rounded-xl pl-4 pr-10 py-3 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary/40 text-foreground appearance-none cursor-pointer shadow-sm hover:border-primary/30"
+              >
+                <option value="All">All Ages</option>
+                <option value="Kids">Kids (0-12)</option>
+                <option value="Teens">Teens (13-19)</option>
+                <option value="Adults">Adults (20+)</option>
+                <option value="Seniors">Seniors (55+)</option>
+              </select>
+              <i className="fa-solid fa-users absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none group-hover:text-primary transition-colors"></i>
+            </div>
+          </div>
+        </motion.div>
+
+        {loading ? (
+          <div className="grid md:grid-cols-3 gap-10">
+            {[1, 2, 3].map(n => <div key={n} className="h-[500px] skeleton rounded-[3rem]" />)}
+          </div>
+        ) : (
+          <motion.div
+            layout
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10"
+          >
+            <AnimatePresence mode="popLayout">
+              {filtered.map((w, idx) => {
+                const isFav = localFavorites.includes(w.id);
+                return (
+                  <motion.div
+                    layout
+                    key={w.id}
+                    initial={{ opacity: 0, y: 40 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="glass-card !p-0 flex flex-col group relative overflow-hidden border-border hover:border-primary/30 transition-all duration-500 hover:shadow-2xl hover:-translate-y-1 bg-gradient-to-b from-card to-card/90"
                   >
-                    <i className={`fa-${isFavorite ? "solid" : "regular"} fa-heart text-red-500 text-xl transition-all ${isFavorite ? "scale-110" : ""}`}></i>
-                  </button>
+                    <div className="h-72 relative overflow-hidden">
+                      <img src={w.imageBase64 || w.imageUrl || undefined} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" alt="" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-                  {w.imageBase64 || w.imageUrl ? (
-                    <img src={w.imageBase64 || w.imageUrl} className="w-full h-56 object-cover rounded-2xl mb-5 group-hover:scale-105 transition-all duration-700" />
-                  ) : (
-                    <div className="w-full h-56 bg-white/5 rounded-2xl mb-5 flex items-center justify-center border border-white/10">
-                      <i className="fa-solid fa-image text-4xl text-gray-500"></i>
+                      <button
+                        onClick={() => toggleFavorite(w.id)}
+                        className={`absolute top-4 right-4 w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-all hover:scale-110 shadow-lg border z-10
+                           ${isFav ? 'bg-white/10 text-red-500 border-red-500/50 shadow-red-500/20' : 'bg-black/30 text-white border-white/20 hover:bg-black/50'}`}
+                      >
+                        <i className={`fa-${isFav ? 'solid' : 'regular'} fa-heart text-sm`}></i>
+                      </button>
+
+                      <div className="absolute bottom-6 left-6 grid gap-2">
+                        <span className="w-fit px-4 py-1.5 bg-primary/20 backdrop-blur-md rounded-xl text-[10px] font-black uppercase text-primary border border-primary/30 tracking-widest">{w.category}</span>
+                        {w.ageGroup && (
+                          <span className="w-fit px-3 py-1 bg-black/40 backdrop-blur-md rounded-lg text-[9px] font-bold text-white uppercase tracking-widest border border-white/10">
+                            <i className="fa-solid fa-child-reaching mr-1"></i> {w.ageGroup}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  )}
 
-                  <h3 className="text-2xl font-semibold text-sky-300 mb-2">{w.title}</h3>
+                    <div className="p-10 flex flex-col flex-1">
+                      <div className="flex justify-between items-start mb-6 gap-4">
+                        <h3 className="text-2xl font-black text-foreground group-hover:text-primary transition-colors leading-tight tracking-tight line-clamp-2">{w.title}</h3>
+                        <div className="flex items-center gap-2 text-[10px] font-black text-amber-500 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20 shadow-sm">
+                          <i className="fa-solid fa-star text-[8px]"></i> {w.rating?.toFixed(1) || "NEW"}
+                        </div>
+                      </div>
 
-                  <p className="text-indigo-300 text-sm mb-2 italic">
-                    By {vendors[w.vendorId]?.name || "Unknown Vendor"}
-                  </p>
-
-                  <p className="text-gray-400 text-sm mb-4 line-clamp-3 flex-grow">{w.description}</p>
-
-                  <div className="flex justify-between text-gray-300 text-sm mb-4">
-                    <span className="flex items-center gap-2"><i className="fa-regular fa-calendar"></i> {new Date(w.date).toLocaleDateString()}</span>
-                    <span className="flex items-center gap-2"><i className="fa-solid fa-location-dot"></i> {w.location}</span>
-                  </div>
-
-                  <div className="flex justify-between text-gray-300 text-sm mb-4">
-                    <span className="font-bold text-white">Rs. {Number(w.price).toLocaleString("en-LK")}</span>
-                    <span className="px-2 py-0.5 bg-white/10 rounded text-xs">{w.ageGroup}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-1 text-yellow-400 text-lg">
-                      {"⭐".repeat(Math.round(w.rating || 0))}
-                      <span className="text-gray-400 text-sm ml-2">({w.rating ? w.rating.toFixed(1) : 0})</span>
-                    </div>
-                    <span className="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded-full border border-green-500/30">
-                      Open
-                    </span>
-                  </div>
-
-                  {isRegistered ? (
-                    <div className="mt-auto pt-4 border-t border-white/10">
-                      <p className="text-center text-sm text-gray-300 mb-2">Rate this workshop:</p>
-                      <div className="flex justify-center gap-2">
-                        {[1, 2, 3, 4, 5].map((star) => (
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-3 text-muted-foreground font-black text-[10px] uppercase tracking-widest">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center text-white text-[10px] shadow-lg shadow-primary/10">
+                            {vendors[w.vendorId]?.businessName?.[0] || vendors[w.vendorId]?.displayName?.[0] || 'V'}
+                          </div>
+                          <span className="group-hover:text-foreground transition-colors">By {vendors[w.vendorId]?.businessName || vendors[w.vendorId]?.displayName || "Collective Artist"}</span>
+                        </div>
+                        {vendors[w.vendorId]?.customOrdersEnabled && (
                           <button
-                            key={star}
-                            onClick={() => handleRate(w.id, star)}
-                            className={`text-2xl transition hover:scale-110 ${star <= userRating ? "text-yellow-400" : "text-gray-600 hover:text-yellow-200"}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSelectedVendor(vendors[w.vendorId]);
+                            }}
+                            className="mt-2 ml-11 w-fit px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg text-[8px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
                           >
-                            ★
+                            <i className="fa-solid fa-wand-magic-sparkles"></i> Custom Request
                           </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 mb-10">
+                        <div className="flex items-center gap-3 text-muted-foreground p-3 bg-secondary/30 rounded-2xl border border-border/50">
+                          <i className="fa-solid fa-calendar text-primary text-sm"></i>
+                          <span className="text-[10px] font-black uppercase tracking-tighter">{new Date(w.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-muted-foreground p-3 bg-secondary/30 rounded-2xl border border-border/50">
+                          <i className="fa-solid fa-location-dot text-primary text-sm"></i>
+                          <span className="text-[10px] font-black uppercase tracking-tighter truncate">{w.location}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-auto flex items-center justify-between pt-8 border-t border-border/50">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] mb-1">Access Pass</span>
+                          <span className="text-3xl font-black text-foreground">Rs. {w.price.toLocaleString()}</span>
+                        </div>
+                        {userData?.registeredWorkshops?.includes(w.id) ? (
+                          <div className="grid grid-cols-2 gap-3">
+                            <Link
+                              href="/profile"
+                              className="px-2 py-3 bg-secondary text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-secondary/80 transition-all flex items-center justify-center gap-2"
+                            >
+                              <i className="fa-solid fa-check-circle"></i> Joined
+                            </Link>
+                            <Link
+                              href={`/profile?reviewId=${w.id}`}
+                              className="px-2 py-3 bg-white/5 text-muted-foreground border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-2"
+                            >
+                              <i className="fa-solid fa-star text-amber-500"></i> Rate
+                            </Link>
+                          </div>
+                        ) : (
+                          <Link
+                            href={user ? `/register/${w.id}` : "/login"}
+                            className="btn-vibe-primary !py-4 !px-10 text-[10px]"
+                          >
+                            Join Experience
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+
+            {filtered.length === 0 && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="col-span-full py-20 text-center glass-card border-dashed">
+                <i className="fa-solid fa-folder-open text-4xl text-muted-foreground/30 mb-6"></i>
+                <h3 className="text-2xl font-black text-foreground mb-2">No workshops found</h3>
+                <p className="text-muted-foreground text-sm font-bold uppercase tracking-widest mb-8">Try adjusting your filters</p>
+                <button
+                  onClick={() => { setSearch(""); setActiveCategory("All"); setActivePriceRange("All"); setActiveAgeGroup("All"); setShowCustomOnly(false); }}
+                  className="btn-vibe-secondary"
+                >
+                  Reset Filters
+                </button>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Custom Request Modal */}
+        <AnimatePresence>
+          {selectedVendor && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedVendor(null)}
+                className="absolute inset-0 bg-black/80 backdrop-blur-md"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="relative w-full max-w-md bg-[#121212] border border-white/10 rounded-3xl overflow-hidden shadow-2xl"
+              >
+                <div className="h-24 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 relative">
+                  <button
+                    onClick={() => setSelectedVendor(null)}
+                    className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/20 text-white flex items-center justify-center hover:bg-black/40 transition-colors"
+                  >
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                  <div className="absolute -bottom-8 left-8 w-20 h-20 rounded-2xl bg-[#121212] p-1.5">
+                    <div className="w-full h-full rounded-xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-3xl text-white font-black">
+                      {selectedVendor.businessName?.[0] || selectedVendor.displayName[0]}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-12 px-8 pb-8 space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-black text-white">{selectedVendor.businessName || selectedVendor.displayName}</h2>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-1">Accepting Custom Requests</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3">
+                      <h3 className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">Specialties</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {Array.from(new Set(workshops.filter(w => w.vendorId === selectedVendor.id).map(w => w.category))).map(cat => (
+                          <span key={cat} className="px-3 py-1 bg-primary/20 text-primary text-[9px] font-bold uppercase tracking-widest rounded-lg border border-primary/20">
+                            {cat}
+                          </span>
                         ))}
                       </div>
                     </div>
-                  ) : (
-                    <Link
-                      href={`/register/${w.id}`}
-                      onClick={(e) => handleRegisterClick(e, w.id)}
-                      className="block mt-auto py-3 text-center bg-gradient-to-r from-sky-500 to-indigo-500 rounded-xl font-bold text-white hover:shadow-[0_0_20px_rgba(56,189,248,0.4)] hover:scale-[1.02] transition"
-                    >
-                      Register Now
-                    </Link>
-                  )}
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </motion.div>
-      )}
 
-      {!loading && filtered.length === 0 && (
-        <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/10">
-          <i className="fa-solid fa-magnifying-glass text-6xl text-gray-600 mb-6"></i>
-          <h3 className="text-2xl font-bold text-white mb-2">No workshops found</h3>
-          <p className="text-gray-400">Try adjusting your filters or search query.</p>
-          <button
-            onClick={() => { setSearch(""); setCategory("All"); setLocation("All"); setPriceRange("All"); setAgeGroup("All"); setRatingFilter("All"); setVendorFilter("All"); }}
-            className="mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition"
-          >
-            Clear Filters
-          </button>
-        </div>
-      )}
+                    <div className="grid grid-cols-2 gap-4">
+                      {selectedVendor.phoneNumber && (
+                        <a
+                          href={`https://wa.me/${selectedVendor.phoneNumber.replace(/\+/g, '').replace(/\s/g, '')}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col items-center justify-center gap-2 group hover:bg-emerald-500/20 transition-all cursor-pointer"
+                        >
+                          <i className="fa-brands fa-whatsapp text-2xl text-emerald-500 group-hover:scale-110 transition-transform"></i>
+                          <span className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">WhatsApp</span>
+                        </a>
+                      )}
+                      {selectedVendor.socialLink && (
+                        <a
+                          href={selectedVendor.socialLink.startsWith('http') ? selectedVendor.socialLink : `https://${selectedVendor.socialLink}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex flex-col items-center justify-center gap-2 group hover:bg-indigo-500/20 transition-all cursor-pointer"
+                        >
+                          <i className="fa-solid fa-link text-2xl text-indigo-500 group-hover:scale-110 transition-transform"></i>
+                          <span className="text-[10px] font-black uppercase text-indigo-500 tracking-widest">Portfolio</span>
+                        </a>
+                      )}
+                    </div>
+
+                    <Link
+                      href={`/custom-request?vendorId=${selectedVendor.id}`}
+                      className="w-full py-4 bg-primary text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
+                    >
+                      <i className="fa-solid fa-file-signature"></i> Start Official Request
+                    </Link>
+                  </div>
+
+                  <div className="text-center">
+                    <p className="text-[9px] text-muted-foreground/60 italic max-w-xs mx-auto">
+                      Contact this vendor directly to discuss your custom workshop requirements.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
     </main>
   );
 }

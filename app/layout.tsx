@@ -1,14 +1,21 @@
+import { Outfit } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
-import CosmicBackground from "@/components/CosmicBackground";
 import Navbar from "./components/Navbar";
 import { AuthProvider } from "./context/AuthContext";
 import FirebaseSetupHelp from "./components/FirebaseSetupHelp";
+import { Providers } from "./providers";
 import type { Metadata } from "next";
 
+const outfit = Outfit({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+});
+
 export const metadata: Metadata = {
-  title: "VibeConnect",
-  description: "Discover and book amazing workshops & events",
+  title: "VibeConnect | Discover Amazing Workshops",
+  description: "Join the community. Learn, Teach, Connect.",
 };
 
 export default function RootLayout({
@@ -17,15 +24,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="relative min-h-screen overflow-x-hidden bg-[#050814] text-gray-100 antialiased">
-        <AuthProvider>
-          <FirebaseSetupHelp />
-          <CosmicBackground />
-          <Navbar />
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" crossOrigin="anonymous" referrerPolicy="no-referrer" />
+      </head>
+      <body className={`${outfit.variable} relative min-h-screen overflow-x-hidden bg-background text-foreground antialiased font-sans`}>
+        <Providers attribute="class" defaultTheme="dark" themes={["light", "dark", "cozy"]} enableSystem disableTransitionOnChange>
+          <AuthProvider>
+            <FirebaseSetupHelp />
+            <Navbar />
+            <main className="relative z-10 pt-24 min-h-screen flex flex-col">{children}</main>
 
-          <main className="relative z-10 pt-32">{children}</main>
-        </AuthProvider>
+            {/* Ambient Background Glows */}
+            <div className="fixed top-20 left-10 w-96 h-96 bg-purple-500/20 rounded-full blur-[100px] -z-10 pointer-events-none animate-float"></div>
+            <div className="fixed bottom-20 right-10 w-96 h-96 bg-blue-500/20 rounded-full blur-[100px] -z-10 pointer-events-none animate-float" style={{ animationDelay: "1s" }}></div>
+          </AuthProvider>
+        </Providers>
       </body>
     </html>
   );
