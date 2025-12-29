@@ -4,9 +4,18 @@ import { useEffect, useState } from "react";
 
 export const AnimatedBackground = () => {
     const [mounted, setMounted] = useState(false);
+    const [particles, setParticles] = useState<{ x: number; y: number; duration: number; delay: number; left: string; top: string }[]>([]);
 
     useEffect(() => {
         setMounted(true);
+        setParticles(Array.from({ length: 6 }).map(() => ({
+            x: Math.random() * 1000 - 500,
+            y: Math.random() * 1000 - 500,
+            duration: 5 + Math.random() * 5,
+            delay: Math.random() * 5,
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`
+        })));
     }, []);
 
     if (!mounted) return null;
@@ -54,12 +63,12 @@ export const AnimatedBackground = () => {
             />
 
             {/* Shape 3: Small floating particles */}
-            {[...Array(6)].map((_, i) => (
+            {particles.map((p, i) => (
                 <motion.div
                     key={i}
                     initial={{
-                        x: Math.random() * 1000 - 500,
-                        y: Math.random() * 1000 - 500,
+                        x: p.x,
+                        y: p.y,
                         opacity: 0,
                         scale: 0
                     }}
@@ -69,14 +78,14 @@ export const AnimatedBackground = () => {
                         scale: [0, 1, 0]
                     }}
                     transition={{
-                        duration: 5 + Math.random() * 5,
+                        duration: p.duration,
                         repeat: Infinity,
-                        delay: Math.random() * 5,
+                        delay: p.delay,
                         ease: "easeInOut"
                     }}
                     style={{
-                        left: `${Math.random() * 100}%`,
-                        top: `${Math.random() * 100}%`,
+                        left: p.left,
+                        top: p.top,
                     }}
                     className={`absolute w-4 h-4 rounded-full ${i % 2 === 0 ? 'bg-primary' : 'bg-indigo-500'} blur-sm`}
                 />

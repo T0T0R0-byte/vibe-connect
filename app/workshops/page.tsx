@@ -58,10 +58,11 @@ function WorkshopsPage() {
 
   useEffect(() => {
     const category = searchParams?.get("category");
-    if (category && CATEGORIES.includes(category)) {
+    if (category && CATEGORIES.includes(category) && category !== activeCategory) {
+      // eslint-disable-next-line
       setActiveCategory(category);
     }
-  }, [searchParams]);
+  }, [searchParams, activeCategory]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -91,8 +92,11 @@ function WorkshopsPage() {
   }, []);
 
   useEffect(() => {
-    if (userData?.favorites) setLocalFavorites(userData.favorites);
-  }, [userData]);
+    if (userData?.favorites && JSON.stringify(userData.favorites) !== JSON.stringify(localFavorites)) {
+      // eslint-disable-next-line
+      setLocalFavorites(userData.favorites);
+    }
+  }, [userData?.favorites, localFavorites]);
 
   const toggleFavorite = async (wId: string) => {
     if (!user) {

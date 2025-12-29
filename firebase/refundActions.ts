@@ -1,12 +1,9 @@
 import { db, storage } from "./firebaseConfig";
 import {
-    collection,
     doc,
     updateDoc,
-    deleteDoc,
     getDoc,
     serverTimestamp,
-    addDoc
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 

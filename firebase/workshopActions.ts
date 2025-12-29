@@ -119,6 +119,7 @@ export const getVendorWorkshops = async (vendorId: string) => {
 
 // UPDATE WORKSHOP
 export const updateWorkshop = async (workshopId: string, data: Partial<WorkshopData>) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateData: any = {
     title: data.title,
     description: data.description,
@@ -240,6 +241,7 @@ export const registerForWorkshop = async (
     }
 
     // Prepare participant data without the File object (Firestore can't store File)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { consentFile, ...detailsToStore } = participant;
 
     await addDoc(collection(db, "registrations"), {

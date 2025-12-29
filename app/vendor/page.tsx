@@ -105,6 +105,7 @@ const VendorDashboard: React.FC = () => {
   const [consentRequired, setConsentRequired] = useState(false);
   const [refundPolicy, setRefundPolicy] = useState("");
   const [customOrdersEnabled, setCustomOrdersEnabled] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [customOrders, setCustomOrders] = useState<any[]>([]);
   const [bankDetails, setBankDetails] = useState("");
   const [profileBusinessName, setProfileBusinessName] = useState("");
@@ -910,6 +911,7 @@ const VendorDashboard: React.FC = () => {
                 </div>
               ) : (
                 <div className="grid md:grid-cols-2 gap-6">
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {customOrders.map((order: any) => (
                     <motion.div
                       key={order.id}

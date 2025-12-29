@@ -14,7 +14,7 @@ const CosmicBackground = () => {
 
         let animationFrameId: number;
         let stars: { x: number; y: number; size: number; speed: number; opacity: number }[] = [];
-        let shootingStars: { x: number; y: number; length: number; speed: number; opacity: number }[] = [];
+        const shootingStars: { x: number; y: number; length: number; speed: number; opacity: number }[] = [];
 
         const resizeCanvas = () => {
             canvas.width = window.innerWidth;

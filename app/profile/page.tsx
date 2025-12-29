@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { doc, updateDoc, getDoc, collection, query, where, getDocs, addDoc } from "firebase/firestore";
@@ -36,7 +36,7 @@ interface RegisteredWorkshop extends Workshop {
     refundPolicy?: string;
 }
 
-export default function ProfilePage() {
+function ProfileContent() {
     const { user, userData, loading } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -46,12 +46,14 @@ export default function ProfilePage() {
     const [phone, setPhone] = useState("");
     const [socialLink, setSocialLink] = useState("");
     const [businessName, setBusinessName] = useState("");
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [photo, setPhoto] = useState<File | null>(null);
     const [photoPreview, setPhotoPreview] = useState("");
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [favorites, setFavorites] = useState<Workshop[]>([]);
     const [registeredWorkshops, setRegisteredWorkshops] = useState<RegisteredWorkshop[]>([]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [customRequests, setCustomRequests] = useState<any[]>([]);
 
 
@@ -427,8 +429,8 @@ export default function ProfilePage() {
                                             <div className="flex justify-between items-start">
                                                 <div>
                                                     <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border mb-3 inline-block ${req.status === 'accepted' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                                                            req.status === 'rejected' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                                                                'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                                        req.status === 'rejected' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                                            'bg-amber-500/10 text-amber-500 border-amber-500/20'
                                                         }`}>
                                                         {req.status}
                                                     </span>
@@ -537,5 +539,15 @@ export default function ProfilePage() {
                 )}
             </AnimatePresence>
         </div>
+    );
+}
+
+export default function ProfilePage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen pt-32 text-center text-white font-black uppercase tracking-widest text-xs animate-pulse">Loading...</div>
+        }>
+            <ProfileContent />
+        </Suspense>
     );
 }

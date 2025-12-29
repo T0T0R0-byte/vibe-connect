@@ -64,7 +64,7 @@ export default function Home() {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="text-lg md:text-2xl text-muted-foreground/80 max-w-2xl mb-12 leading-relaxed font-medium"
           >
-            The modern sanctuary for creative souls. Learn, collaborate, and master new crafts with the world's finest mentors.
+            The modern sanctuary for creative souls. Learn, collaborate, and master new crafts with the world&apos;s finest mentors.
           </motion.p>
 
           <motion.div

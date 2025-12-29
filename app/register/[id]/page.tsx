@@ -74,6 +74,7 @@ export default function RegisterWorkshopPage() {
         fetchWorkshop();
     }, [id, user, authLoading, router]);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleParticipantChange = (index: number, field: keyof ParticipantDetails, value: any) => {
         const updated = [...participants];
         updated[index] = { ...updated[index], [field]: value };

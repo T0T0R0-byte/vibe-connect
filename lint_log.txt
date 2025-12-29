@@ -1,0 +1,185 @@
+
+> vibeconnect2@0.1.0 lint /Users/nethank/Desktop/Vibe connect/vibeconnect2
+> eslint
+
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/admin/page.tsx
+    9:34  warning  'YAxis' is defined but never used                                                                                                                                                                                                                                                        @typescript-eslint/no-unused-vars
+    9:86  warning  'CartesianGrid' is defined but never used                                                                                                                                                                                                                                                @typescript-eslint/no-unused-vars
+   53:48  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   64:60  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  175:22  warning  'e' is defined but never used                                                                                                                                                                                                                                                            @typescript-eslint/no-unused-vars
+  184:22  warning  'e' is defined but never used                                                                                                                                                                                                                                                            @typescript-eslint/no-unused-vars
+  194:18  warning  'e' is defined but never used                                                                                                                                                                                                                                                            @typescript-eslint/no-unused-vars
+  227:45  warning  'deleteApp' is assigned a value but never used                                                                                                                                                                                                                                           @typescript-eslint/no-unused-vars
+  303:72  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  479:91  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  597:69  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  597:69  warning  img elements must have an alt prop, either with meaningful text, or an empty string for decorative images                                                                                                                                                                                jsx-a11y/alt-text
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/AnimatedBackground.tsx
+  61:28  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/AnimatedBackground.tsx:61:28
+  59 |                     key={i}
+  60 |                     initial={{
+> 61 |                         x: Math.random() * 1000 - 500,
+     |                            ^^^^^^^^^^^^^ Cannot call impure function
+  62 |                         y: Math.random() * 1000 - 500,
+  63 |                         opacity: 0,
+  64 |                         scale: 0                                                                              react-hooks/purity
+  62:28  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/AnimatedBackground.tsx:62:28
+  60 |                     initial={{
+  61 |                         x: Math.random() * 1000 - 500,
+> 62 |                         y: Math.random() * 1000 - 500,
+     |                            ^^^^^^^^^^^^^ Cannot call impure function
+  63 |                         opacity: 0,
+  64 |                         scale: 0
+  65 |                     }}                                                                                   react-hooks/purity
+  72:39  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/AnimatedBackground.tsx:72:39
+  70 |                     }}
+  71 |                     transition={{
+> 72 |                         duration: 5 + Math.random() * 5,
+     |                                       ^^^^^^^^^^^^^ Cannot call impure function
+  73 |                         repeat: Infinity,
+  74 |                         delay: Math.random() * 5,
+  75 |                         ease: "easeInOut"                                                         react-hooks/purity
+  74:32  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/AnimatedBackground.tsx:74:32
+  72 |                         duration: 5 + Math.random() * 5,
+  73 |                         repeat: Infinity,
+> 74 |                         delay: Math.random() * 5,
+     |                                ^^^^^^^^^^^^^ Cannot call impure function
+  75 |                         ease: "easeInOut"
+  76 |                     }}
+  77 |                     style={{                                                                     react-hooks/purity
+  78:34  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/AnimatedBackground.tsx:78:34
+  76 |                     }}
+  77 |                     style={{
+> 78 |                         left: `${Math.random() * 100}%`,
+     |                                  ^^^^^^^^^^^^^ Cannot call impure function
+  79 |                         top: `${Math.random() * 100}%`,
+  80 |                     }}
+  81 |                     className={`absolute w-4 h-4 rounded-full ${i % 2 === 0 ? 'bg-primary' : 'bg-indigo-500'} blur-sm`}  react-hooks/purity
+  79:33  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/AnimatedBackground.tsx:79:33
+  77 |                     style={{
+  78 |                         left: `${Math.random() * 100}%`,
+> 79 |                         top: `${Math.random() * 100}%`,
+     |                                 ^^^^^^^^^^^^^ Cannot call impure function
+  80 |                     }}
+  81 |                     className={`absolute w-4 h-4 rounded-full ${i % 2 === 0 ? 'bg-primary' : 'bg-indigo-500'} blur-sm`}
+  82 |                 />       react-hooks/purity
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/AuthBear.tsx
+  3:10  warning  'useEffect' is defined but never used  @typescript-eslint/no-unused-vars
+  3:21  warning  'useState' is defined but never used   @typescript-eslint/no-unused-vars
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/FirebaseSetupHelp.tsx
+  20:23  warning  '_' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               @typescript-eslint/no-unused-vars
+  24:13  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/FirebaseSetupHelp.tsx:24:13
+  22 |
+  23 |         if (missing.length > 0) {
+> 24 |             setMissingKeys(missing);
+     |             ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  25 |             setIsVisible(true);
+  26 |         }
+  27 |     }, []);  react-hooks/set-state-in-effect
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/Navbar.tsx
+   93:45  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  117:88  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/ThemeToggle.tsx
+  12:9  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/components/ThemeToggle.tsx:12:9
+  10 |
+  11 |     useEffect(() => {
+> 12 |         setMounted(true);
+     |         ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  13 |     }, []);
+  14 |
+  15 |     if (!mounted) return null;  react-hooks/set-state-in-effect
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/custom-request/page.tsx
+   9:18  warning  'AnimatePresence' is defined but never used           @typescript-eslint/no-unused-vars
+  19:11  warning  'vendorNameParam' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  23:23  warning  'setAttendees' is assigned a value but never used     @typescript-eslint/no-unused-vars
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/layout.tsx
+  3:8  warning  'Link' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/page.tsx
+  67:110  error  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/profile/page.tsx
+   68:28  warning  'setCategoryFilter' is assigned a value but never used                                                                                                                                                                                                                                   @typescript-eslint/no-unused-vars
+   86:8   warning  React Hook useEffect has missing dependencies: 'fetchCustomRequests', 'fetchFavorites', and 'fetchRegisteredWorkshops'. Either include them or remove the dependency array                                                                                                               react-hooks/exhaustive-deps
+  489:53  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  489:53  warning  img elements must have an alt prop, either with meaningful text, or an empty string for decorative images                                                                                                                                                                                jsx-a11y/alt-text
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/register/[id]/page.tsx
+    9:18  warning  'AnimatePresence' is defined but never used                                                                                                                                                                                                                                              @typescript-eslint/no-unused-vars
+   43:19  warning  'userData' is assigned a value but never used                                                                                                                                                                                                                                            @typescript-eslint/no-unused-vars
+  159:29  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  189:41  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/vendor/page.tsx
+    13:69  warning  'increment' is defined but never used                                                                                                                                                                                                                                                    @typescript-eslint/no-unused-vars
+    81:10  warning  'error' is assigned a value but never used                                                                                                                                                                                                                                               @typescript-eslint/no-unused-vars
+   163:6   warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array                                                                                                                                                                             react-hooks/exhaustive-deps
+   201:13  warning  'customQ' is assigned a value but never used                                                                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+   228:14  warning  'err' is defined but never used                                                                                                                                                                                                                                                          @typescript-eslint/no-unused-vars
+   426:53  warning  'i' is defined but never used                                                                                                                                                                                                                                                            @typescript-eslint/no-unused-vars
+   429:27  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+   503:23  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  1017:23  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  1017:23  warning  img elements must have an alt prop, either with meaningful text, or an empty string for decorative images                                                                                                                                                                                jsx-a11y/alt-text
+  1131:30  warning  'e' is defined but never used                                                                                                                                                                                                                                                            @typescript-eslint/no-unused-vars
+  1199:29  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/app/workshops/page.tsx
+  111:14  warning  'e' is defined but never used                                                                                                                                                                                                                                                            @typescript-eslint/no-unused-vars
+  303:23  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/nethank/Desktop/Vibe connect/vibeconnect2/firebase/firebaseConfig.ts
+  17:13  warning  '_' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 53 problems (14 errors, 39 warnings)
+
+ ELIFECYCLE  Command failed with exit code 1.

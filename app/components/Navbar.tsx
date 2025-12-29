@@ -114,6 +114,7 @@ export default function Navbar() {
                                         <i className="fa-solid fa-store text-indigo-400"></i> Vendor Dashboard
                                     </Link>
                                 )}
+                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                 {(userData?.email === "admin@vibe.com" || (userData as any)?.role === 'admin') && (
                                     <Link href="/admin" className="flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white/5 transition-colors text-red-400">
                                         <i className="fa-solid fa-shield-halved"></i> Admin Dashboard

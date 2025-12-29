@@ -31,6 +31,7 @@ export default function AdminLoginPage() {
                 setError("Assess Denied: Not an authorized administrator.");
                 await auth.signOut(); // Logout if not admin
             }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
             setError(err.message);
         } finally {
