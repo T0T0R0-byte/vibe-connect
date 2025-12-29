@@ -8,7 +8,9 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/firebase/firebaseConfig";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function CustomRequestPage() {
+import { Suspense } from "react";
+
+function CustomRequestContent() {
     const { user, userData, loading } = useAuth();
     const router = useRouter();
 
@@ -157,5 +159,17 @@ export default function CustomRequestPage() {
                 )}
             </motion.div>
         </div>
+    );
+}
+
+export default function CustomRequestPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        }>
+            <CustomRequestContent />
+        </Suspense>
     );
 }
