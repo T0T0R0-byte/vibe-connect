@@ -56,6 +56,11 @@ export default function RegisterWorkshopPage() {
 
     useEffect(() => {
         if (!authLoading && !user) { router.push("/login"); return; }
+        if (userData?.role === 'vendor') {
+            alert("Vendors cannot register for workshops. Please use a participant account.");
+            router.push("/workshops");
+            return;
+        }
 
         const fetchWorkshop = async () => {
             if (typeof id !== "string") return;

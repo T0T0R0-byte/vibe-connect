@@ -393,6 +393,14 @@ function WorkshopsPage() {
                               <i className="fa-solid fa-star text-amber-500"></i> Rate
                             </Link>
                           </div>
+                        ) : userData?.role === 'vendor' ? (
+                          <button
+                            disabled
+                            className="px-6 py-4 bg-white/5 text-muted-foreground/50 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-not-allowed border border-white/5"
+                            title="Vendors cannot register for workshops"
+                          >
+                            <i className="fa-solid fa-ban mr-2"></i> Vendor Account
+                          </button>
                         ) : (
                           <Link
                             href={user ? `/register/${w.id}` : "/login"}

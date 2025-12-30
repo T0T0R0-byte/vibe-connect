@@ -2,28 +2,11 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/firebase/firebaseConfig';
-import { uploadRefundProof } from '@/firebase/refundActions';
+import { ParticipantController } from '@/app/controllers/ParticipantController';
+import { Participant } from '@/app/models/Participant';
 import StatusBadge from '../ui/StatusBadge';
-
-interface Participant {
-    uid: string;
-    displayName: string;
-    email: string;
-    phoneNumber?: string;
-    receiptUrl?: string;
-    refundProofUrl?: string;
-    status?: string; // "pending" | "approved" | "rejected" | "paid" | "failed" | "refunded";
-    registrationId?: string;
-    refundStatus?: string;
-    workshopTitle?: string;
-    workshopId?: string;
-    price?: number;
-    details?: {
-        fullName: string;
-    };
-}
+import { GlassCard } from "@/app/components/ui/GlassCard";
+import { ActionButton } from "@/app/components/ui/ActionButton";
 
 interface FinanceTabProps {
     participants: Participant[];
@@ -48,9 +31,15 @@ const FinanceTab: React.FC<FinanceTabProps> = ({ participants, fetchData }) => {
     const handleApprovePayment = async (regId?: string) => {
         if (!regId || !confirm("Confirm this payment as Received?")) return;
         try {
-            await updateDoc(doc(db, "registrations", regId), { status: 'paid' });
+            await ParticipantController.updateStatus(regId, 'paid');
             fetchData();
         } catch (e) { alert("Error approving payment"); }
+    };
+
+    const handleRejectPayment = async (regId?: string) => {
+        if (!regId || !confirm("Reject this payment?")) return;
+        await ParticipantController.updateStatus(regId, 'rejected');
+        fetchData();
     };
 
     const handleMarkRefunded = async () => {
@@ -58,15 +47,7 @@ const FinanceTab: React.FC<FinanceTabProps> = ({ participants, fetchData }) => {
         setUploading(true);
         setUploadSuccess(false);
         try {
-            // 1. Upload Proof
-            await uploadRefundProof(selectedReg.registrationId, proofFile);
-            // 2. Update status to refunded manually if the action didn't do it (it usually just sets refundStatus)
-            // But for "Refunded" final status, we want to update the main status too.
-            await updateDoc(doc(db, "registrations", selectedReg.registrationId), {
-                status: 'refunded',
-                refundStatus: 'vendor_proof_uploaded'
-            });
-
+            await ParticipantController.processRefundProof(selectedReg.registrationId, proofFile);
             setUploadSuccess(true);
             await fetchData();
             setTimeout(() => {
@@ -88,7 +69,7 @@ const FinanceTab: React.FC<FinanceTabProps> = ({ participants, fetchData }) => {
 
             {/* Header / Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="glass-card !p-6 flex items-center justify-between">
+                <GlassCard className="!p-6 flex items-center justify-between">
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Pending Revenue</p>
                         <h3 className="text-2xl font-black text-foreground">
@@ -99,9 +80,9 @@ const FinanceTab: React.FC<FinanceTabProps> = ({ participants, fetchData }) => {
                     <div className="w-12 h-12 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-500 text-xl">
                         <i className="fa-solid fa-clock-rotate-left"></i>
                     </div>
-                </div>
+                </GlassCard>
 
-                <div className="glass-card !p-6 flex items-center justify-between">
+                <GlassCard className="!p-6 flex items-center justify-between">
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Active Refund Req.</p>
                         <h3 className="text-2xl font-black text-foreground">{refundRequests.length}</h3>
@@ -110,7 +91,7 @@ const FinanceTab: React.FC<FinanceTabProps> = ({ participants, fetchData }) => {
                     <div className="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center text-red-500 text-xl">
                         <i className="fa-solid fa-triangle-exclamation"></i>
                     </div>
-                </div>
+                </GlassCard>
             </div>
 
             {/* Toggle View */}
@@ -130,7 +111,7 @@ const FinanceTab: React.FC<FinanceTabProps> = ({ participants, fetchData }) => {
             </div>
 
             {/* Main Content Area */}
-            <div className="glass-card !p-0 overflow-hidden min-h-[400px]">
+            <GlassCard className="!p-0 overflow-hidden min-h-[400px]">
 
                 {/* APPROVALS VIEW */}
                 {activeView === 'approvals' && (
@@ -168,23 +149,22 @@ const FinanceTab: React.FC<FinanceTabProps> = ({ participants, fetchData }) => {
                                                     </a>
                                                 ) : <span className="text-[10px] text-muted-foreground">-</span>}
                                             </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <button
+                                            <td className="px-6 py-4 text-right flex gap-2 justify-end">
+                                                <ActionButton
                                                     onClick={() => handleApprovePayment(p.registrationId)}
-                                                    className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 transition-all shadow-lg mr-2"
+                                                    size="sm"
+                                                    variant="primary"
+                                                    className="bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20"
                                                 >
                                                     Approve
-                                                </button>
-                                                <button
-                                                    onClick={async () => {
-                                                        if (!p.registrationId || !confirm("Reject this payment?")) return;
-                                                        await updateDoc(doc(db, "registrations", p.registrationId), { status: 'rejected' });
-                                                        fetchData();
-                                                    }}
-                                                    className="px-4 py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-[9px] font-black uppercase hover:bg-red-500/20 transition-all"
+                                                </ActionButton>
+                                                <ActionButton
+                                                    onClick={() => handleRejectPayment(p.registrationId)}
+                                                    size="sm"
+                                                    variant="destructive"
                                                 >
                                                     Reject
-                                                </button>
+                                                </ActionButton>
                                             </td>
                                         </tr>
                                     ))}
@@ -222,12 +202,13 @@ const FinanceTab: React.FC<FinanceTabProps> = ({ participants, fetchData }) => {
                                                     <i className="fa-solid fa-lock mr-2"></i> Locked by Admin
                                                 </span>
                                             ) : (
-                                                <button
+                                                <ActionButton
                                                     onClick={() => { setSelectedReg(p); setProofModalOpen(true); }}
-                                                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-black uppercase transition-all"
+                                                    variant="secondary"
+                                                    size="sm"
                                                 >
                                                     Process Refund
-                                                </button>
+                                                </ActionButton>
                                             )}
                                         </div>
                                     </div>
@@ -310,7 +291,7 @@ const FinanceTab: React.FC<FinanceTabProps> = ({ participants, fetchData }) => {
                     </div>
                 )}
 
-            </div>
+            </GlassCard>
 
             {/* UPLOAD MODAL */}
             <AnimatePresence>
@@ -343,7 +324,7 @@ const FinanceTab: React.FC<FinanceTabProps> = ({ participants, fetchData }) => {
                 )}
             </AnimatePresence>
 
-        </div>
+        </div >
     );
 };
 
