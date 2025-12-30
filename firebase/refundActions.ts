@@ -40,17 +40,30 @@ export const requestRefund = async (registrationId: string) => {
 export const uploadRefundProof = async (registrationId: string, proofFile: File) => {
     const regRef = doc(db, "registrations", registrationId);
 
-    // Upload Proof
-    const proofRef = ref(storage, `refund_proofs/${registrationId}-${Date.now()}-${proofFile.name}`);
-    await uploadBytes(proofRef, proofFile);
-    const proofUrl = await getDownloadURL(proofRef);
+    let proofUrl: string | null = null;
+
+    try {
+        // Upload Proof with Timeout (10s) to prevent hanging
+        const proofRef = ref(storage, `refund_proofs/${registrationId}-${Date.now()}-${proofFile.name}`);
+
+        const uploadPromise = uploadBytes(proofRef, proofFile);
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Upload timed out")), 10000));
+
+        await Promise.race([uploadPromise, timeoutPromise]);
+        proofUrl = await getDownloadURL(proofRef);
+    } catch (error) {
+        console.warn("Refund proof upload failed or timed out. Proceeding with status update only.", error);
+        // We allow the process to continue even if the image upload fails, 
+        // effectively "forcing" the acceptance as requested by the user.
+    }
 
     await updateDoc(regRef, {
         refundStatus: "vendor_proof_uploaded",
-        refundProofUrl: proofUrl,
-        refundProofDate: serverTimestamp(),
+        ...(proofUrl ? { refundProofUrl: proofUrl } : {}),
+        lastUpdated: serverTimestamp()
     });
 };
+
 
 // 3. PARTICIPANT: Confirm or Dispute Refund
 export const confirmRefundReceipt = async (registrationId: string, received: boolean) => {

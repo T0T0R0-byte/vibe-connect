@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, increment } from "firebase/firestore";
 import { db } from "@/firebase/firebaseConfig";
+import FinanceTab from "../components/vendor/FinanceTab";
 import { uploadRefundProof } from "@/firebase/refundActions";
 import {
   BarChart,
@@ -82,12 +83,13 @@ const VendorDashboard: React.FC = () => {
   const [participantsMap, setParticipantsMap] = useState<Record<string, Participant[]>>({});
 
   // Navigation State
-  const [activeTab, setActiveTab] = useState<"overview" | "workshops" | "analytics" | "participants" | "customOrders" | "profile">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "workshops" | "analytics" | "participants" | "customOrders" | "profile" | "finance">("overview");
 
   // Selection States
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Mobile Menu State
   const [selectedWorkshop, setSelectedWorkshop] = useState<Workshop | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
   const [participantSearch, setParticipantSearch] = useState("");
 
   // Form states
@@ -114,11 +116,7 @@ const VendorDashboard: React.FC = () => {
   const [profilePhone, setProfilePhone] = useState("");
   const [profileSocialLink, setProfileSocialLink] = useState("");
 
-  // Refund Proof Modal State
-  const [refundProofModalOpen, setRefundProofModalOpen] = useState(false);
-  const [selectedRefundReg, setSelectedRefundReg] = useState<{ id: string, name: string } | null>(null);
-  const [refundProofFile, setRefundProofFile] = useState<File | null>(null);
-  const [uploadingProof, setUploadingProof] = useState(false);
+
 
   useEffect(() => {
     if (userData?.customOrdersEnabled !== undefined) {
@@ -168,43 +166,40 @@ const VendorDashboard: React.FC = () => {
     try {
       const data = await getVendorWorkshops(user.uid);
       setWorkshops(data as Workshop[]);
+
       const pMap: Record<string, Participant[]> = {};
-      for (const ws of data as Workshop[]) {
-        const q = query(collection(db, "registrations"), where("workshopId", "==", ws.id));
-        const snap = await getDocs(q);
-        const participants: Participant[] = [];
-        for (const regDoc of snap.docs) {
+
+      // Parallelize Registration Fetches
+      const registrationPromises = (data as Workshop[]).map(ws =>
+        getDocs(query(collection(db, "registrations"), where("workshopId", "==", ws.id)))
+      );
+
+      const registrationSnapshots = await Promise.all(registrationPromises);
+
+      (data as Workshop[]).forEach((ws, index) => {
+        const snap = registrationSnapshots[index];
+        pMap[ws.id] = snap.docs.map(regDoc => {
           const regData = regDoc.data();
-          const userSnap = await getDoc(doc(db, "users", regData.userId));
-          if (userSnap.exists()) {
-            const uData = userSnap.data();
-            participants.push({
-              uid: uData.uid,
-              displayName: regData.participantDetails?.fullName || uData.displayName,
-              email: uData.email,
-              phoneNumber: uData.phoneNumber,
-              receiptUrl: regData.receiptUrl,
-              refundProofUrl: regData.refundProofUrl,
-              status: regData.status || "pending",
-              registrationId: regDoc.id,
-              refundStatus: regData.refundStatus || "none",
-              consentUrl: regData.consentUrl,
-              details: regData.participantDetails
-            });
-          }
-        }
-        pMap[ws.id] = participants;
-      }
+          // Optimization: Skip fetching User doc. Use participantDetails if available.
+          return {
+            uid: regData.userId,
+            displayName: regData.participantDetails?.fullName || "Guest Participant",
+            email: regData.participantDetails?.email || "No Email Provided",
+            phoneNumber: regData.participantDetails?.phone || "",
+            receiptUrl: regData.receiptUrl,
+            refundProofUrl: regData.refundProofUrl,
+            status: regData.status || "pending",
+            registrationId: regDoc.id,
+            refundStatus: regData.refundStatus || "none",
+            consentUrl: regData.consentUrl,
+            details: regData.participantDetails
+          } as Participant;
+        });
+      });
+
       setParticipantsMap(pMap);
 
       // Fetch Custom Requests
-      const customQ = query(
-        collection(db, "custom_requests"),
-        where("vendorId", "in", [user.uid, "all"]),
-        where("status", "!=", "completed") // Optional: hide completed? or just show all. Let's show all for now, maybe sort by date
-      );
-      // Note: Inequality filter property and first sort order must be the same field and other constraints...
-      // Simpler query:
       const customQSimple = query(collection(db, "custom_requests"), where("vendorId", "in", [user.uid, "all"]));
       const customSnap = await getDocs(customQSimple);
       const cList = customSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -234,23 +229,7 @@ const VendorDashboard: React.FC = () => {
     setBankDetails(""); setSelectedWorkshop(null);
   };
 
-  const handleUploadProof = async () => {
-    if (!selectedRefundReg || !refundProofFile) return;
-    setUploadingProof(true);
-    try {
-      await uploadRefundProof(selectedRefundReg.id, refundProofFile);
-      setRefundProofModalOpen(false);
-      setRefundProofFile(null);
-      setSelectedRefundReg(null);
-      alert("Refund proof uploaded successfully!");
-      fetchData();
-    } catch (e) {
-      console.error(e);
-      alert("Failed to upload proof");
-    } finally {
-      setUploadingProof(false);
-    }
-  };
+
 
   const calculateRevenue = () => workshops.reduce((acc, ws) => acc + (ws.price * (participantsMap[ws.id]?.filter(p => p.status === 'paid').length || 0)), 0);
   const totalParticipants = Object.values(participantsMap).reduce((acc, list) => acc + list.filter(p => p.status !== 'refunded').length, 0);
@@ -312,6 +291,9 @@ const VendorDashboard: React.FC = () => {
           <button onClick={() => setActiveTab("participants")} className={`sidebar-item w-full ${activeTab === 'participants' ? 'active' : ''}`}>
             <i className="fa-solid fa-users"></i> Participants
           </button>
+          <button onClick={() => setActiveTab("finance")} className={`sidebar-item w-full ${activeTab === 'finance' ? 'active' : ''}`}>
+            <i className="fa-solid fa-wallet text-amber-500"></i> Finance & Refunds
+          </button>
           <button onClick={() => setActiveTab("customOrders")} className={`sidebar-item w-full ${activeTab === 'customOrders' ? 'active' : ''}`}>
             <i className="fa-solid fa-file-invoice text-primary"></i> Custom Requests
           </button>
@@ -347,6 +329,83 @@ const VendorDashboard: React.FC = () => {
             Create Workshop
           </button>
         </header>
+
+        {/* Mobile Header / Toggle */}
+        <div className="lg:hidden flex items-center justify-between mb-8">
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-foreground hover:bg-white/10 transition-colors"
+          >
+            <i className="fa-solid fa-bars text-xl"></i>
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-black text-foreground uppercase tracking-widest">{activeTab}</span>
+          </div>
+        </div>
+
+        {/* Mobile Menu Drawer */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm lg:hidden"
+              />
+              <motion.div
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="fixed top-0 left-0 bottom-0 w-80 bg-[#121212] z-50 p-6 flex flex-col border-r border-white/10 lg:hidden"
+              >
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-black text-foreground tracking-tighter">VIBE<span className="text-primary">.</span></h2>
+                  <button
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-muted-foreground hover:text-white transition-colors"
+                  >
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+
+                <nav className="space-y-2 flex-1 overflow-y-auto">
+                  {[
+                    { id: 'overview', icon: 'fa-grid-2', label: 'Overview' },
+                    { id: 'profile', icon: 'fa-store', label: 'Profile' },
+                    { id: 'workshops', icon: 'fa-layer-group', label: 'My Workshops' },
+                    { id: 'analytics', icon: 'fa-chart-line', label: 'Analytics' },
+                    { id: 'participants', icon: 'fa-users', label: 'Participants' },
+                    { id: 'finance', icon: 'fa-wallet', label: 'Finance & Refunds', checkColor: 'text-amber-500' },
+                    { id: 'customOrders', icon: 'fa-file-invoice', label: 'Custom Requests', checkColor: 'text-primary' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => { setActiveTab(item.id as "overview" | "workshops" | "analytics" | "participants" | "customOrders" | "profile" | "finance"); setIsMobileMenuOpen(false); }}
+                      className={`sidebar-item w-full ${activeTab === item.id ? 'active' : ''}`}
+                    >
+                      <i className={`fa-solid ${item.icon} ${item.checkColor || ''}`}></i> {item.label}
+                    </button>
+                  ))}
+                </nav>
+
+                <div className="pt-6 border-t border-white/5">
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/5">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-sky-500 flex items-center justify-center text-[10px] font-bold text-white uppercase">
+                      {userData?.displayName?.[0] || 'V'}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-black text-foreground truncate">{userData?.displayName || 'Vendor'}</span>
+                      <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Active Vendor</span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* Dynamic Section Rendering */}
         <AnimatePresence mode="wait">
@@ -729,6 +788,13 @@ const VendorDashboard: React.FC = () => {
             </motion.div>
           )}
 
+          {activeTab === "finance" && (
+            <FinanceTab
+              participants={Object.values(participantsMap).flat()}
+              fetchData={fetchData}
+            />
+          )}
+
           {activeTab === "participants" && (
             <motion.div
               key="participants"
@@ -824,58 +890,20 @@ const VendorDashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4">
-                        <div className="flex flex-col items-end gap-2">
-                          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Refund</span>
-                          <div className="flex items-center gap-2">
-                            {p.refundStatus === 'refund_requested' || p.refundStatus === 'vendor_proof_uploaded' ? (
-                              <button
-                                onClick={() => {
-                                  setSelectedRefundReg({ id: p.registrationId!, name: p.displayName || 'Unknown' });
-                                  setRefundProofModalOpen(true);
-                                }}
-                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${p.refundStatus === 'vendor_proof_uploaded' ? 'bg-emerald-500 text-white' : 'bg-secondary hover:bg-primary hover:text-white'}`}
-                                title="Upload Refund Proof"
-                              >
-                                {p.refundStatus === 'vendor_proof_uploaded' ? <i className="fa-solid fa-check"></i> : <i className="fa-solid fa-upload"></i>}
-                              </button>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground font-bold">-</span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="h-10 w-px bg-border mx-2 hide-mobile" />
-
-                        <div className="flex items-center gap-2">
-                          {p.status === 'pending' && (
-                            <button
-                              onClick={async () => {
-                                if (!p.registrationId) return;
-                                if (confirm(`Approve payment for ${p.displayName}?`)) {
-                                  await updateDoc(doc(db, "registrations", p.registrationId), { status: 'paid' });
-                                  fetchData();
-                                }
-                              }}
-                              className="px-3 py-2 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg mr-2 flex items-center gap-2"
-                            >
-                              <i className="fa-solid fa-check"></i> Approve
-                            </button>
-                          )}
-                          <select
-                            value={p.status}
-                            onChange={async (e) => {
-                              if (!p.registrationId) return;
-                              await updateDoc(doc(db, "registrations", p.registrationId), { status: e.target.value });
-                              fetchData();
-                            }}
-                            className="bg-secondary border border-border rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary/40 transition-all cursor-pointer"
-                          >
-                            <option value="pending">Pending</option>
-                            <option value="paid">Paid</option>
-                            <option value="refunded">Refunded</option>
-                          </select>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={p.status}
+                          onChange={async (e) => {
+                            if (!p.registrationId) return;
+                            await updateDoc(doc(db, "registrations", p.registrationId), { status: e.target.value });
+                            fetchData();
+                          }}
+                          className="bg-secondary border border-border rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary/40 transition-all cursor-pointer"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="paid">Paid</option>
+                          <option value="refunded">Refunded</option>
+                        </select>
                       </div>
                     </motion.div>
                   ))}
@@ -1425,29 +1453,7 @@ const VendorDashboard: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {refundProofModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setRefundProofModalOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-md" />
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="glass-card w-full max-w-md relative z-10 !p-8">
-              <h3 className="text-xl font-black text-foreground mb-4">Upload Refund Proof</h3>
-              <p className="text-sm text-muted-foreground mb-6">Upload a screenshot or receipt of the refund transaction for <b>{selectedRefundReg?.name}</b>.</p>
 
-              <div className="space-y-4">
-                <div className="relative h-32 bg-secondary/30 border-2 border-dashed border-border rounded-2xl flex flex-col items-center justify-center group hover:border-primary/50 transition-all">
-                  <input type="file" onChange={e => setRefundProofFile(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*,application/pdf" />
-                  <i className={`fa-solid ${refundProofFile ? 'fa-check text-emerald-500' : 'fa-cloud-upload text-muted-foreground'} text-2xl mb-2`}></i>
-                  <span className="text-xs font-black uppercase text-muted-foreground">{refundProofFile ? refundProofFile.name : "Click to Upload"}</span>
-                </div>
-
-                <button onClick={handleUploadProof} disabled={uploadingProof || !refundProofFile} className="btn-vibe-primary w-full">
-                  {uploadingProof ? "Uploading..." : "Submit Proof"}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div >
   );
 };

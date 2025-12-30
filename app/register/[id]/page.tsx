@@ -130,6 +130,7 @@ export default function RegisterWorkshopPage() {
         setRegistering(true);
         try {
             await registerForWorkshop(workshop.id, user.uid, receipt, participants);
+            alert("Registration Submitted Successfully! You will be redirected shortly.");
             setStep(3);
         } catch (e) {
             console.error(e);
