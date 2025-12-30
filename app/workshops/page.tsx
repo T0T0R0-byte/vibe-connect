@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useAuth } from "@/app/context/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatedBackground } from "@/app/components/AnimatedBackground";
+import Image from "next/image";
 
 interface Workshop {
   id: string;
@@ -129,6 +130,10 @@ function WorkshopsPage() {
     const matchesCustom = !showCustomOnly || vendors[w.vendorId]?.customOrdersEnabled;
 
     return matchesSearch && matchesCategory && matchesAge && matchesPrice && matchesCustom && matchesDate && matchesLocation;
+  }).sort((a, b) => {
+    const ratingDiff = (b.rating || 0) - (a.rating || 0);
+    if (ratingDiff !== 0) return ratingDiff;
+    return (b.ratingCount || 0) - (a.ratingCount || 0);
   });
 
   const uniqueLocations = Array.from(new Set(workshops.map(w => w.location))).filter(Boolean);
@@ -172,7 +177,7 @@ function WorkshopsPage() {
               transition={{ delay: 0.1 }}
               className="text-muted-foreground font-medium text-lg md:text-xl max-w-2xl mx-auto leading-relaxed"
             >
-              Join the collective. Master new skills. Connect with visionary mentors in a world built for creators.
+              Join the collective. Master new skills. Connect with visionary vendors in a world built for creators.
             </motion.p>
           </div>
         </div>
@@ -300,7 +305,14 @@ function WorkshopsPage() {
                     className="glass-card !p-0 flex flex-col group relative overflow-hidden border-border hover:border-primary/30 transition-all duration-500 hover:shadow-2xl hover:-translate-y-1 bg-gradient-to-b from-card to-card/90"
                   >
                     <div className="h-72 relative overflow-hidden">
-                      <img src={w.imageBase64 || w.imageUrl || undefined} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" alt="" />
+                      <Image
+                        src={w.imageBase64 || w.imageUrl || "https://images.unsplash.com/photo-1513364776144-60967b0f800f?q=80&w=2071&auto=format&fit=crop"}
+                        alt={w.title}
+                        fill
+                        priority={idx < 4}
+                        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover transition-transform duration-1000 group-hover:scale-110"
+                      />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
                       <button
@@ -330,24 +342,24 @@ function WorkshopsPage() {
                       </div>
 
                       <div className="flex flex-col">
-                        <div className="flex items-center gap-3 text-muted-foreground font-black text-[10px] uppercase tracking-widest">
+                        <div className="flex items-center gap-3 text-muted-foreground font-black text-[10px] uppercase tracking-widest flex-wrap">
                           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center text-white text-[10px] shadow-lg shadow-primary/10">
                             {vendors[w.vendorId]?.businessName?.[0] || vendors[w.vendorId]?.displayName?.[0] || 'V'}
                           </div>
                           <span className="group-hover:text-foreground transition-colors">By {vendors[w.vendorId]?.businessName || vendors[w.vendorId]?.displayName || "Collective Artist"}</span>
+                          {vendors[w.vendorId]?.customOrdersEnabled && (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSelectedVendor(vendors[w.vendorId]);
+                              }}
+                              className="w-fit px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg text-[8px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                            >
+                              <i className="fa-solid fa-wand-magic-sparkles"></i> Custom Request
+                            </button>
+                          )}
                         </div>
-                        {vendors[w.vendorId]?.customOrdersEnabled && (
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setSelectedVendor(vendors[w.vendorId]);
-                            }}
-                            className="mt-2 ml-11 w-fit px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg text-[8px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-                          >
-                            <i className="fa-solid fa-wand-magic-sparkles"></i> Custom Request
-                          </button>
-                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4 mb-10">
@@ -494,11 +506,7 @@ function WorkshopsPage() {
                     </Link>
                   </div>
 
-                  <div className="text-center">
-                    <p className="text-[9px] text-muted-foreground/60 italic max-w-xs mx-auto">
-                      Contact this vendor directly to discuss your custom workshop requirements.
-                    </p>
-                  </div>
+
                 </div>
               </motion.div>
             </div>

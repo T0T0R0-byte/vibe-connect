@@ -333,11 +333,18 @@ function ProfileContent() {
                                                 </div>
 
                                                 <div className="flex flex-wrap items-center gap-3 mt-auto">
-                                                    <button onClick={() => openReviewModal(ws)} className="btn-vibe-secondary !text-[9px] !py-2 !px-4 flex items-center gap-2">
+                                                    <button onClick={() => {
+                                                        const wsDate = new Date(ws.date);
+                                                        if (wsDate > new Date()) {
+                                                            alert("You cannot rate this workshop yet. Please wait until the workshop has commenced to leave a genuine review.");
+                                                            return;
+                                                        }
+                                                        openReviewModal(ws);
+                                                    }} className="btn-vibe-secondary !text-[9px] !py-2 !px-4 flex items-center gap-2">
                                                         <i className="fa-solid fa-star"></i> Review
                                                     </button>
 
-                                                    {(ws.status === 'paid' || ws.status === 'pending' || ws.status === 'approved') && ws.refundStatus === 'none' && (
+                                                    {(ws.status === 'paid' || ws.status === 'approved') && ws.refundStatus === 'none' && (
                                                         <button onClick={async () => {
                                                             const policy = ws.refundPolicy || "Refunds are done outside the site. Contact vendor directly.";
                                                             if (confirm(`REFUND POLICY:\n${policy}\n\nHave you contacted the vendor and wish to mark this as 'Refund Requested'?`)) {
@@ -486,7 +493,10 @@ function ProfileContent() {
                                         <Link href={`/register/${w.id}`} key={w.id} className="glass-card !p-0 group hover:border-primary/30 transition-all overflow-hidden flex flex-col bg-card/60">
                                             <div className="h-32 w-full relative overflow-hidden bg-secondary/50">
                                                 {w.imageBase64 || w.imageUrl ? (
-                                                    <img src={w.imageBase64 || w.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                                    <>
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img src={w.imageBase64 || w.imageUrl} alt={w.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                                    </>
                                                 ) : (
                                                     <div className="flex items-center justify-center h-full text-muted-foreground"><i className="fa-solid fa-image text-2xl"></i></div>
                                                 )}

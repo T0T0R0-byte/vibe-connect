@@ -242,6 +242,7 @@ const VendorDashboard: React.FC = () => {
       setRefundProofModalOpen(false);
       setRefundProofFile(null);
       setSelectedRefundReg(null);
+      alert("Refund proof uploaded successfully!");
       fetchData();
     } catch (e) {
       console.error(e);
@@ -343,7 +344,7 @@ const VendorDashboard: React.FC = () => {
             className="btn-vibe-primary flex items-center gap-3 shadow-lg shadow-primary/20"
           >
             <i className="fa-solid fa-plus text-sm"></i>
-            Launch Workshop
+            Create Workshop
           </button>
         </header>
 
@@ -796,12 +797,12 @@ const VendorDashboard: React.FC = () => {
                         </div>
                         <div className="flex gap-2">
                           {p.receiptUrl && (
-                            <a href={p.receiptUrl} target="_blank" className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all shadow-sm group/icon" title="View Receipt">
+                            <a href={p.receiptUrl} target="_blank" className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary border border-primary/20 hover:bg-primary hover:text-white transition-all shadow-sm group/icon" title="View Receipt">
                               <i className="fa-solid fa-receipt text-xs"></i>
                             </a>
                           )}
                           {p.consentUrl && (
-                            <a href={p.consentUrl} target="_blank" className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all shadow-sm group/icon" title="View Consent Form">
+                            <a href={p.consentUrl} target="_blank" className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary border border-primary/20 hover:bg-primary hover:text-white transition-all shadow-sm group/icon" title="View Consent Form">
                               <i className="fa-solid fa-file-contract text-xs"></i>
                             </a>
                           )}
@@ -847,6 +848,20 @@ const VendorDashboard: React.FC = () => {
                         <div className="h-10 w-px bg-border mx-2 hide-mobile" />
 
                         <div className="flex items-center gap-2">
+                          {p.status === 'pending' && (
+                            <button
+                              onClick={async () => {
+                                if (!p.registrationId) return;
+                                if (confirm(`Approve payment for ${p.displayName}?`)) {
+                                  await updateDoc(doc(db, "registrations", p.registrationId), { status: 'paid' });
+                                  fetchData();
+                                }
+                              }}
+                              className="px-3 py-2 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg mr-2 flex items-center gap-2"
+                            >
+                              <i className="fa-solid fa-check"></i> Approve
+                            </button>
+                          )}
                           <select
                             value={p.status}
                             onChange={async (e) => {
@@ -858,6 +873,7 @@ const VendorDashboard: React.FC = () => {
                           >
                             <option value="pending">Pending</option>
                             <option value="paid">Paid</option>
+                            <option value="refunded">Refunded</option>
                           </select>
                         </div>
                       </div>
@@ -1325,6 +1341,24 @@ const VendorDashboard: React.FC = () => {
                             </select>
                             <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"></i>
                           </div>
+                        </div>
+
+                        <div className="space-y-2 col-span-2">
+                          <label className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-2xl cursor-pointer group hover:bg-white/10 transition-all">
+                            <div className={`w-10 h-6 rounded-full p-1 transition-colors ${consentRequired ? 'bg-primary' : 'bg-zinc-700'}`}>
+                              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${consentRequired ? 'translate-x-4' : 'translate-x-0'}`} />
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={consentRequired}
+                              onChange={(e) => setConsentRequired(e.target.checked)}
+                              className="hidden"
+                            />
+                            <div>
+                              <span className="text-[10px] font-black uppercase text-white tracking-widest block">Require Consent Form</span>
+                              <span className="text-[9px] font-bold text-muted-foreground">Mandatory file upload for all registrations</span>
+                            </div>
+                          </label>
                         </div>
                       </div>
 

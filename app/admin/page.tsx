@@ -41,7 +41,9 @@ interface Registration {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     refundConfirmationDate?: any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     createdAt?: any;
+    receiptUrl?: string;
 }
 
 export default function AdminDashboard() {
@@ -211,7 +213,7 @@ export default function AdminDashboard() {
 
     const stats = [
         { label: "Total Users", value: users.length, icon: "fa-users", color: "text-blue-500", bg: "bg-blue-500/10", action: () => { setActiveSection('users'); setUserRoleFilter('all'); } },
-        { label: "Mentors", value: users.filter(u => u.role === 'vendor').length, icon: "fa-user-tie", color: "text-purple-500", bg: "bg-purple-500/10", action: () => { setActiveSection('users'); setUserRoleFilter('vendor'); } },
+        { label: "Vendors", value: users.filter(u => u.role === 'vendor').length, icon: "fa-user-tie", color: "text-purple-500", bg: "bg-purple-500/10", action: () => { setActiveSection('users'); setUserRoleFilter('vendor'); } },
         { label: "Active Bookings", value: registrations.filter(r => r.status === 'paid').length, icon: "fa-ticket", color: "text-green-500", bg: "bg-green-500/10", action: () => setActiveSection('registrations') },
         { label: "Refund Requests", value: registrations.filter(r => r.refundStatus !== 'none' && r.refundStatus !== 'admin_approved' && r.refundStatus !== 'admin_rejected').length, icon: "fa-hand-holding-dollar", color: "text-orange-500", bg: "bg-orange-500/10", action: () => setActiveSection('registrations') },
         { label: "Admins", value: users.filter(u => u.role === 'admin').length, icon: "fa-user-shield", color: "text-red-500", bg: "bg-red-500/10", action: () => { setActiveSection('users'); setUserRoleFilter('admin'); } },
@@ -404,7 +406,7 @@ export default function AdminDashboard() {
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart data={[
                                                     { name: 'Participants', value: users.filter(u => u.role === 'user').length },
-                                                    { name: 'Mentors', value: users.filter(u => u.role === 'vendor').length },
+                                                    { name: 'Vendors', value: users.filter(u => u.role === 'vendor').length },
                                                     { name: 'Admins', value: users.filter(u => u.role === 'admin').length }
                                                 ]}>
                                                     <XAxis dataKey="name" tick={{ fill: '#666', fontSize: 10, fontWeight: 900 }} axisLine={false} tickLine={false} />
@@ -474,7 +476,7 @@ export default function AdminDashboard() {
                                     {[
                                         { id: 'all', label: 'All Users', icon: 'fa-users' },
                                         { id: 'user', label: 'Participants', icon: 'fa-user' },
-                                        { id: 'vendor', label: 'Mentors', icon: 'fa-user-tie' },
+                                        { id: 'vendor', label: 'Vendors', icon: 'fa-user-tie' },
                                         { id: 'admin', label: 'Admins', icon: 'fa-user-shield' },
                                     ].map(filter => (
                                         <button
@@ -585,7 +587,7 @@ export default function AdminDashboard() {
                                         <thead className="sticky top-0 bg-secondary/80 backdrop-blur-3xl z-10 border-b border-white/5 uppercase text-[10px] font-black tracking-widest text-muted-foreground">
                                             <tr>
                                                 <th className="px-8 py-6">Workshop</th>
-                                                <th className="px-8 py-6">Mentor</th>
+                                                <th className="px-8 py-6">Vendor</th>
                                                 <th className="px-8 py-6">Date</th>
                                                 <th className="px-8 py-6">Price</th>
                                                 <th className="px-8 py-6 text-right">Actions</th>
@@ -667,7 +669,7 @@ export default function AdminDashboard() {
                                                 <th className="px-8 py-6">Participant</th>
                                                 <th className="px-8 py-6">Workshop</th>
                                                 <th className="px-8 py-6">Status</th>
-                                                <th className="px-8 py-6">Refund Status</th>
+                                                <th className="px-8 py-6">Documents & Refund Info</th>
                                                 <th className="px-8 py-6 text-right">Actions</th>
                                             </tr>
                                         </thead>
@@ -678,11 +680,7 @@ export default function AdminDashboard() {
                                                         <div className="space-y-1">
                                                             <p className="text-sm font-black text-foreground">{r.participantDetails?.fullName || "Guest"}</p>
                                                             <p className="text-[10px] font-bold text-muted-foreground">ID: {r.id.slice(0, 8)}</p>
-                                                            {r.consentUrl && (
-                                                                <a href={r.consentUrl} target="_blank" className="text-[9px] font-black text-primary hover:underline uppercase tracking-widest">
-                                                                    View Contract
-                                                                </a>
-                                                            )}
+
                                                         </div>
                                                     </td>
                                                     <td className="px-8 py-6">
@@ -690,25 +688,40 @@ export default function AdminDashboard() {
                                                         <p className="text-[10px] font-bold text-muted-foreground">{new Date(r.workshopDate || "").toLocaleDateString()}</p>
                                                     </td>
                                                     <td className="px-8 py-6">
-                                                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${r.status === 'paid' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>
+                                                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${r.status === 'paid' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                                                            r.status === 'refunded' ? 'bg-zinc-500/10 text-muted-foreground border-zinc-500/20' :
+                                                                'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>
                                                             {r.status}
                                                         </span>
                                                     </td>
                                                     <td className="px-8 py-6">
-                                                        <div className="flex flex-col gap-1.5">
+                                                        <div className="flex flex-col gap-2 items-start">
                                                             <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest w-fit border ${r.refundStatus === 'participant_confirmed' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
                                                                 r.refundStatus === 'participant_disputed' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
                                                                     r.refundStatus === 'vendor_proof_uploaded' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
                                                                         r.refundStatus === 'refund_requested' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
                                                                             'bg-white/5 text-muted-foreground border-white/10'
                                                                 }`}>
-                                                                {r.refundStatus ? r.refundStatus.replace(/_/g, " ") : "NONE"}
+                                                                {r.refundStatus ? r.refundStatus.replace(/_/g, " ") : "NO REFUND REQUEST"}
                                                             </span>
-                                                            {r.refundProofUrl && (
-                                                                <a href={r.refundProofUrl} target="_blank" className="text-[9px] font-black text-sky-400 hover:text-sky-300 transition-colors uppercase tracking-widest flex items-center gap-1">
-                                                                    <i className="fa-solid fa-paperclip"></i> View Proof
-                                                                </a>
-                                                            )}
+
+                                                            <div className="flex flex-col gap-1 mt-1">
+                                                                {r.receiptUrl && (
+                                                                    <a href={r.receiptUrl} target="_blank" className="text-[9px] font-bold text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-tight flex items-center gap-1.5 p-1 hover:bg-white/5 rounded">
+                                                                        <i className="fa-solid fa-receipt w-4"></i> User Bank Receipt
+                                                                    </a>
+                                                                )}
+                                                                {r.consentUrl && (
+                                                                    <a href={r.consentUrl} target="_blank" className="text-[9px] font-bold text-purple-400 hover:text-purple-300 transition-colors uppercase tracking-tight flex items-center gap-1.5 p-1 hover:bg-white/5 rounded">
+                                                                        <i className="fa-solid fa-file-contract w-4"></i> Consent Form
+                                                                    </a>
+                                                                )}
+                                                                {r.refundProofUrl && (
+                                                                    <a href={r.refundProofUrl} target="_blank" className="text-[9px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors uppercase tracking-tight flex items-center gap-1.5 p-1 hover:bg-white/5 rounded">
+                                                                        <i className="fa-solid fa-money-bill-transfer w-4"></i> Vendor Refund Proof
+                                                                    </a>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </td>
                                                     <td className="px-8 py-6 text-right">
@@ -876,7 +889,7 @@ export default function AdminDashboard() {
                         {/* Workshop Modal */}
                         <AnimatePresence>
                             {showWorkshopModal && (
-                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
                                     <motion.div
                                         initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
                                         className="bg-[#0f0f13] border border-white/10 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-vibe shadow-2xl"

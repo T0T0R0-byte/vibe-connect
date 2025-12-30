@@ -1,6 +1,6 @@
 import { Outfit } from "next/font/google";
 import "./globals.css";
-import Link from "next/link";
+
 import Navbar from "./components/Navbar";
 import { AuthProvider } from "./context/AuthContext";
 import FirebaseSetupHelp from "./components/FirebaseSetupHelp";
@@ -26,6 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" crossOrigin="anonymous" referrerPolicy="no-referrer" />
       </head>
       <body className={`${outfit.variable} relative min-h-screen overflow-x-hidden bg-background text-foreground antialiased font-sans`}>
@@ -36,8 +37,8 @@ export default function RootLayout({
             <main className="relative z-10 pt-24 min-h-screen flex flex-col">{children}</main>
 
             {/* Ambient Background Glows */}
-            <div className="fixed top-20 left-10 w-96 h-96 bg-purple-500/20 rounded-full blur-[100px] -z-10 pointer-events-none animate-float"></div>
-            <div className="fixed bottom-20 right-10 w-96 h-96 bg-blue-500/20 rounded-full blur-[100px] -z-10 pointer-events-none animate-float" style={{ animationDelay: "1s" }}></div>
+            <div className="fixed top-20 left-10 w-96 h-96 bg-purple-500/10 rounded-full blur-[80px] -z-10 pointer-events-none animate-float"></div>
+            <div className="fixed bottom-20 right-10 w-96 h-96 bg-blue-500/10 rounded-full blur-[80px] -z-10 pointer-events-none animate-float" style={{ animationDelay: "1s" }}></div>
           </AuthProvider>
         </Providers>
       </body>

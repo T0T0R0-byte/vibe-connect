@@ -7,6 +7,7 @@ export const AnimatedBackground = () => {
     const [particles, setParticles] = useState<{ x: number; y: number; duration: number; delay: number; left: string; top: string }[]>([]);
 
     useEffect(() => {
+        // eslint-disable-next-line
         setMounted(true);
         setParticles(Array.from({ length: 6 }).map(() => ({
             x: Math.random() * 1000 - 500,
@@ -24,14 +25,14 @@ export const AnimatedBackground = () => {
         <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
             {/* Soft Ambient Glows (Base) */}
             <motion.div
-                animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+                animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.3, 0.2] }}
                 transition={{ duration: 10, repeat: Infinity }}
-                className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/20 blur-[100px] rounded-full"
+                className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 blur-[80px] rounded-full"
             />
             <motion.div
-                animate={{ scale: [1, 1.3, 1], opacity: [0.2, 0.4, 0.2] }}
+                animate={{ scale: [1, 1.3, 1], opacity: [0.1, 0.2, 0.1] }}
                 transition={{ duration: 15, repeat: Infinity, delay: 2 }}
-                className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-indigo-500/10 blur-[100px] rounded-full"
+                className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-indigo-500/5 blur-[80px] rounded-full"
             />
 
             {/* Floating Glass Shapes (The "Thingys") */}

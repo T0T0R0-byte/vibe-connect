@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
 
@@ -30,8 +31,8 @@ export default function Home() {
 
         {/* Background Atmosphere */}
         <div className="absolute inset-0 -z-20 overflow-hidden">
-          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/5 blur-[150px] rounded-full animate-vibe-float" />
-          <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-indigo-500/5 blur-[120px] rounded-full animate-vibe-float" style={{ animationDelay: '3s' }} />
+          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/5 blur-[80px] rounded-full animate-vibe-float" />
+          <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-indigo-500/5 blur-[60px] rounded-full animate-vibe-float" style={{ animationDelay: '3s' }} />
         </div>
 
         <motion.div style={{ opacity, scale, y }} className="max-w-5xl mx-auto z-10 flex flex-col items-center">
@@ -64,7 +65,7 @@ export default function Home() {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="text-lg md:text-2xl text-muted-foreground/80 max-w-2xl mb-12 leading-relaxed font-medium"
           >
-            The modern sanctuary for creative souls. Learn, collaborate, and master new crafts with the world&apos;s finest mentors.
+            The modern sanctuary for creative souls. Learn, collaborate, and master new crafts with the world&apos;s finest vendors.
           </motion.p>
 
           <motion.div
@@ -114,8 +115,15 @@ export default function Home() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
-            className="md:col-span-2 glass-card flex flex-col justify-end p-10 bg-[url('https://images.unsplash.com/photo-1513364776144-60967b0f800f?q=80&w=2071&auto=format&fit=crop')] bg-cover relative group overflow-hidden"
+            className="md:col-span-2 glass-card flex flex-col justify-end p-10 relative group overflow-hidden"
           >
+            <Image
+              src="https://images.unsplash.com/photo-1513364776144-60967b0f800f?q=80&w=2071&auto=format&fit=crop"
+              alt="Workshops"
+              fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 66vw, 66vw"
+              className="object-cover transition-transform duration-700 group-hover:scale-105"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent group-hover:via-black/20 transition-all duration-700" />
             <div className="relative z-10">
               <span className="text-primary font-black uppercase tracking-[0.3em] text-[10px] mb-2 block">Premium Curation</span>
@@ -132,8 +140,8 @@ export default function Home() {
             <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white text-2xl shadow-2xl shadow-primary/50 mb-6">
               <i className="fa-solid fa-shield-check"></i>
             </div>
-            <h3 className="text-xl font-black text-foreground mb-4 capitalize tracking-tight">Verified Mentors Only</h3>
-            <p className="text-sm text-muted-foreground/80 font-medium">We vet every mentor to ensure you get professional-grade education.</p>
+            <h3 className="text-xl font-black text-foreground mb-4 capitalize tracking-tight">Verified Vendors Only</h3>
+            <p className="text-sm text-muted-foreground/80 font-medium">We vet every vendor to ensure you get professional-grade education.</p>
           </motion.div>
 
           <motion.div
@@ -170,7 +178,7 @@ export default function Home() {
       <section className="py-24 px-6 border-t border-white/5 bg-secondary/10">
         <div className="max-w-7xl mx-auto flex flex-col items-center text-center space-y-6">
           <h2 className="text-4xl md:text-5xl font-black text-foreground">Ready to Get Started?</h2>
-          <p className="text-muted-foreground max-w-2xl text-lg">Join our community of learners and mentors. Start your journey today.</p>
+          <p className="text-muted-foreground max-w-2xl text-lg">Join our community of learners and vendors. Start your journey today.</p>
           <Link href="/register/demo" className="btn-vibe-primary px-12 py-6 text-sm">
             Find a Workshop
           </Link>

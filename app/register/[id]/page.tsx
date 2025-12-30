@@ -8,6 +8,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import { registerForWorkshop } from "@/firebase/workshopActions";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import Image from "next/image";
 
 interface Workshop {
     id: string;
@@ -63,11 +64,21 @@ export default function RegisterWorkshopPage() {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 let vPhone = "";
+                let vBankDetails = "";
                 if (data.vendorId) {
                     const vSnap = await getDoc(doc(db, "users", data.vendorId));
-                    if (vSnap.exists()) vPhone = vSnap.data().phoneNumber || "";
+                    if (vSnap.exists()) {
+                        const vData = vSnap.data();
+                        vPhone = vData.phoneNumber || "";
+                        vBankDetails = vData.bankDetails || "";
+                    }
                 }
-                setWorkshop({ id: docSnap.id, ...data, vendorPhone: vPhone } as Workshop);
+                setWorkshop({
+                    id: docSnap.id,
+                    ...data,
+                    vendorPhone: vPhone,
+                    bankDetails: data.bankDetails || vBankDetails
+                } as Workshop);
             }
             setLoading(false);
         };
@@ -98,8 +109,11 @@ export default function RegisterWorkshopPage() {
     const handleNext = () => {
         for (const p of participants) {
             if (!p.fullName || !p.age || !p.phone || !p.address) { alert("Please complete all details"); return; }
-            if (parseInt(p.age) < 18 && !p.consentFile) {
-                alert(`Minor consent required for ${p.fullName}. Please upload the signed form.`);
+            const isMinor = parseInt(p.age) < 18;
+            const needsConsent = isMinor || workshop?.consentRequired;
+
+            if (needsConsent && !p.consentFile) {
+                alert(`Consent form required for ${p.fullName} (${isMinor ? 'Minor' : 'Workshop Policy'}). Please upload the signed form.`);
                 return;
             }
         }
@@ -156,7 +170,13 @@ export default function RegisterWorkshopPage() {
                         </div>
 
                         <div className="h-[500px] relative rounded-[3rem] overflow-hidden group shadow-3xl border border-border/50">
-                            <img src={workshop.imageBase64 || workshop.imageUrl || undefined} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" alt="" />
+                            <Image
+                                src={workshop.imageBase64 || workshop.imageUrl || "https://images.unsplash.com/photo-1513364776144-60967b0f800f?q=80&w=2071&auto=format&fit=crop"}
+                                alt={workshop.title || "Workshop"}
+                                fill
+                                priority
+                                className="object-cover transition-transform duration-1000 group-hover:scale-110"
+                            />
                             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                             <div className="absolute bottom-12 left-12 right-12 flex justify-between items-end">
                                 <div className="space-y-3">
@@ -202,7 +222,7 @@ export default function RegisterWorkshopPage() {
                             </section>
 
                             <section className="pt-12 border-t border-border space-y-8">
-                                <h3 className="text-xl font-black text-foreground tracking-tight uppercase">Mentor Interaction & Policies</h3>
+                                <h3 className="text-xl font-black text-foreground tracking-tight uppercase">Vendor Interaction & Policies</h3>
                                 <div className="grid md:grid-cols-3 gap-6">
                                     <div className="p-6 bg-secondary/50 rounded-3xl border border-border hover:border-primary/30 transition-all">
                                         <i className="fa-solid fa-rotate-left text-primary mb-4 block text-2xl"></i>
@@ -249,7 +269,7 @@ export default function RegisterWorkshopPage() {
                                 </div>
                                 <div className="space-y-3">
                                     <h4 className="text-3xl font-black text-foreground tracking-tight">Registration Successful!</h4>
-                                    <p className="text-sm text-muted-foreground font-medium leading-relaxed px-4">Your connection is being processed by the mentor grid. Welcome to the collective.</p>
+                                    <p className="text-sm text-muted-foreground font-medium leading-relaxed px-4">Your connection is being processed by the vendor grid. Welcome to the collective.</p>
                                 </div>
                                 <div className="space-y-4 pt-6">
                                     {workshop.whatsappLink && (
@@ -322,7 +342,7 @@ export default function RegisterWorkshopPage() {
                                                             />
                                                         </div>
 
-                                                        {parseInt(p.age) < 18 && (
+                                                        {(parseInt(p.age) < 18 || workshop.consentRequired) && (
                                                             <div className="p-6 bg-primary/5 rounded-[2rem] border border-primary/20 space-y-4 shadow-inner">
                                                                 <div className="flex items-center justify-between">
                                                                     <div className="flex items-center gap-3">

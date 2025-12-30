@@ -9,6 +9,7 @@ import { db, storage } from "@/firebase/firebaseConfig";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Suspense } from "react";
+import { jsPDF } from "jspdf";
 
 function CustomRequestContent() {
     const { user, userData, loading } = useAuth();
@@ -64,6 +65,59 @@ function CustomRequestContent() {
         } finally {
             setUploading(false);
         }
+    };
+
+    const handleDownloadTemplate = () => {
+        const doc = new jsPDF();
+
+        // Header
+        doc.setFontSize(22);
+        doc.setTextColor(220, 38, 38); // Red color
+        doc.text("VibeConnect", 20, 20);
+
+        doc.setFontSize(16);
+        doc.setTextColor(0, 0, 0);
+        doc.text("Custom Workshop Request Form", 20, 30);
+
+        doc.setLineWidth(0.5);
+        doc.line(20, 35, 190, 35);
+
+        doc.setFontSize(12);
+        doc.setTextColor(100);
+        doc.text("Please fill in the details below to help us curate your perfect experience.", 20, 45);
+
+        // Fields
+        let y = 60;
+        const lineSpacing = 15;
+
+        const fields = [
+            "Requested Topic / Skill:",
+            "Preferred Date(s):",
+            "Estimated Budget (LKR):",
+            "Number of Attendees:",
+            "Preferred Location:",
+            "Skill Level (Beginner/Inter/Adv):",
+            "Specific Requirements / Goals:"
+        ];
+
+        fields.forEach(field => {
+            doc.setFontSize(12);
+            doc.setTextColor(50);
+            doc.text(field, 20, y);
+
+            // Draw underline for input
+            doc.setDrawColor(200);
+            doc.line(80, y, 190, y);
+            y += lineSpacing;
+        });
+
+        // Footer
+        doc.setFontSize(10);
+        doc.setTextColor(150);
+        doc.text("Please save this PDF after filling it out (or printing and scanning)", 20, 270);
+        doc.text("and upload it back to the request form.", 20, 275);
+
+        doc.save("VibeConnect_Custom_Request_Template.pdf");
     };
 
     return (
@@ -123,9 +177,13 @@ function CustomRequestContent() {
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
                                     <label className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] ml-1">Requirement Document</label>
-                                    <a href="/templates/VibeConnect_Custom_Request.pdf" download className="text-[9px] font-black text-primary hover:underline uppercase tracking-widest flex items-center gap-2">
-                                        <i className="fa-solid fa-download"></i> Download Template
-                                    </a>
+                                    <button
+                                        type="button"
+                                        onClick={handleDownloadTemplate}
+                                        className="text-[9px] font-black text-primary hover:underline uppercase tracking-widest flex items-center gap-2"
+                                    >
+                                        <i className="fa-solid fa-download"></i> Download Dynamic Template (PDF)
+                                    </button>
                                 </div>
 
                                 <label className="flex flex-col items-center justify-center h-32 bg-secondary/20 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:border-primary/30 hover:bg-secondary/30 transition-all group">
