@@ -2,7 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  reactCompiler: false,
+  experimental: {
+    // @ts-expect-error - React Compiler is experimental
+    reactCompiler: false,
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
