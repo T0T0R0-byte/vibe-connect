@@ -77,7 +77,7 @@ const PaymentForm = ({
                 setError("Payment status unknown. Please check your dashboard.");
                 setProcessing(false);
             }
-        } catch (e: any) {
+        } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
             console.error("Payment Error Exception:", e);
             setError(e.message || "Unexpected payment error occurred.");
             setProcessing(false);
@@ -141,7 +141,7 @@ export default function RegisterPage() {
 
     useEffect(() => {
         const fetchWorkshop = async () => {
-            if (!id) return;
+            if (!id || !user) return;
             try {
                 const docRef = doc(db, "workshops", id as string);
                 const docSnap = await getDoc(docRef);
@@ -199,7 +199,7 @@ export default function RegisterPage() {
             }
         };
         fetchWorkshop();
-    }, [id, router, userData]);
+    }, [id, router, userData, user]);
 
     const addParticipant = () => {
         setParticipants([...participants, {
@@ -217,7 +217,7 @@ export default function RegisterPage() {
         }
     };
 
-    const updateParticipant = (index: number, field: keyof ParticipantDetails, value: any) => {
+    const updateParticipant = (index: number, field: keyof ParticipantDetails, value: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
         const newParticipants = [...participants];
         newParticipants[index] = { ...newParticipants[index], [field]: value };
         setParticipants(newParticipants);

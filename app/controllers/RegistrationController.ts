@@ -23,7 +23,7 @@ export class RegistrationController {
         workshopId: string,
         userId: string,
         receiptFile: File | null,
-        participants: any[]
+        participants: any[] // eslint-disable-line @typescript-eslint/no-explicit-any
     ): Promise<void> {
 
         let receiptUrl = "";

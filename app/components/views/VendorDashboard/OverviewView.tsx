@@ -1,11 +1,12 @@
 import React from 'react';
 import { Workshop } from "@/app/models/Workshop";
+import { UserData } from "@/app/context/AuthContext";
 import { Participant } from "@/app/models/Participant";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie, Legend } from 'recharts';
 import { GlassCard } from "@/app/components/ui/GlassCard";
 
 interface OverviewViewProps {
-    userData: any;
+    userData: UserData;
     workshops: Workshop[];
     participants: Participant[];
     totalRevenue: number;
@@ -52,7 +53,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ userData, workshops,
                             </span>
                         </h2>
                         <p className="text-white/60 font-medium max-w-lg">
-                            Here's what's happening with your workshops today. You have <span className="text-white font-bold">12 new participants</span> waiting for approval.
+                            Here&apos;s what&apos;s happening with your workshops today. You have <span className="text-white font-bold">12 new participants</span> waiting for approval.
                         </p>
                     </div>
                     {/* Mini Quick Action */}

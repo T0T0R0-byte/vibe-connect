@@ -5,7 +5,7 @@ import { doc, updateDoc } from "firebase/firestore";
 import { motion } from "framer-motion";
 
 interface CustomizationViewProps {
-    userData: any;
+    userData: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     onUpdate: () => void;
 }
 
@@ -72,7 +72,7 @@ export const CustomizationView: React.FC<CustomizationViewProps> = ({ userData, 
                                 />
                             </button>
                         </div>
-                        <p className="text-[10px] text-muted-foreground mt-4 ml-2 font-medium">When enabled, a "Custom Request" button will appear on your profile and workshops.</p>
+                        <p className="text-[10px] text-muted-foreground mt-4 ml-2 font-medium">When enabled, a &quot;Custom Request&quot; button will appear on your profile and workshops.</p>
                     </div>
                 </GlassCard>
 

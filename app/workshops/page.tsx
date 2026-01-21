@@ -120,7 +120,7 @@ function WorkshopsPage() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const workshopList = await getAllWorkshops() as any as Workshop[];
+        const workshopList = await getAllWorkshops() as any as Workshop[]; // eslint-disable-line @typescript-eslint/no-explicit-any
         setWorkshops(workshopList);
 
         const vQuery = query(collection(db, "users"), where("role", "==", "vendor"));
@@ -384,7 +384,7 @@ function WorkshopsPage() {
                   <i className="fa-solid fa-binoculars text-6xl text-primary/40"></i>
                 </div>
                 <h3 className="text-5xl font-black text-foreground mb-6">Uncharted Territory</h3>
-                <p className="text-muted-foreground text-sm font-black uppercase tracking-[0.4em] mb-12 max-w-md mx-auto leading-relaxed">We couldn't find any vibes matching those specific filters. Reach for something new?</p>
+                <p className="text-muted-foreground text-sm font-black uppercase tracking-[0.4em] mb-12 max-w-md mx-auto leading-relaxed">We couldn&apos;t find any vibes matching those specific filters. Reach for something new?</p>
                 <button
                   onClick={() => { setSearch(""); setActiveCategory("All"); setActivePriceRange("All"); setActiveAgeGroup("All"); setShowCustomOnly(false); }}
                   className="btn-vibe-primary px-16 py-6"
@@ -413,7 +413,7 @@ function WorkshopsPage() {
               <p className="text-muted-foreground font-black text-xs uppercase tracking-widest mb-10">This master artist accepts custom vibe requests.</p>
 
               <div className="p-8 bg-secondary/50 rounded-3xl border border-white/5 mb-10">
-                <p className="text-foreground font-medium leading-relaxed italic">"Let's create something unique that fits your specific vision and Mastery path."</p>
+                <p className="text-foreground font-medium leading-relaxed italic">&quot;Let&apos;s create something unique that fits your specific vision and Mastery path.&quot;</p>
               </div>
 
               <button onClick={() => setSelectedVendor(null)} className="btn-vibe-primary w-full py-6">

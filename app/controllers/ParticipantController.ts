@@ -40,7 +40,7 @@ export class ParticipantController {
         let snapshot;
         try {
             snapshot = await getDocs(q);
-        } catch (error: any) {
+        } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
             // Fallback: If index is missing, fetch without sorting
             if (error?.code === 'failed-precondition' || error?.message?.includes('index')) {
                 console.warn("Using fallback query (unsorted) due to missing index.");
@@ -62,7 +62,7 @@ export class ParticipantController {
                 registrationId: d.id,
                 status: data.status,
                 ...data
-            } as any as Participant;
+            } as any as Participant; // eslint-disable-line @typescript-eslint/no-explicit-any
         });
     }
 

@@ -134,7 +134,7 @@ export default function SeedPage() {
             <h1 className="text-4xl font-bold mb-4">Dashboard Migrator</h1>
             <p className="mb-8 text-gray-400 max-w-md text-center">
                 Click below to populate your <b>current account</b> with sample Workshops, Participants, and Refund Requests.
-                This simulates migrating "old data" to the new system.
+                This simulates migrating &quot;old data&quot; to the new system.
             </p>
 
             {user ? (

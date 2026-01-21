@@ -6,7 +6,7 @@ import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
-interface UserData {
+export interface UserData {
     uid: string;
     email: string;
     displayName: string;

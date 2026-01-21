@@ -59,14 +59,14 @@ export class WorkshopController {
         };
 
         // Clean undefined
-        Object.keys(workshopData).forEach(key => (workshopData as any)[key] === undefined && delete (workshopData as any)[key]);
+        Object.keys(workshopData).forEach(key => (workshopData as any)[key] === undefined && delete (workshopData as any)[key]); // eslint-disable-line @typescript-eslint/no-explicit-any
 
         await addDoc(collection(db, "workshops"), workshopData);
     }
 
     // Update Workshop
     static async updateWorkshop(id: string, data: Partial<Workshop>, newImages?: File[]): Promise<void> {
-        const updateData: any = { ...data };
+        const updateData: any = { ...data }; // eslint-disable-line @typescript-eslint/no-explicit-any
 
         if (newImages && newImages.length > 0) {
             const uploadPromises = newImages.map(async (file, index) => {

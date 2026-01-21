@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { Participant } from "../../models/Participant";
+import { Participant } from "@/app/models/Participant";
 import { rejectRefund } from "@/firebase/workshopActions";
 import { ParticipantController } from "@/app/controllers/ParticipantController";
 import { loadStripe } from "@stripe/stripe-js";
@@ -61,7 +61,7 @@ const RefundPaymentForm = ({ amount, onSuccess, onCancel }: { amount: number, on
 
 export const RefundsView: React.FC<RefundsViewProps> = ({ participants }) => {
     // Filter only those who requested refund or are refunded/rejected
-    const refundList = participants.filter(p => ['refund_requested', 'refunded', 'rejected', 'refund_rejected'].includes(p.status));
+    const refundList = participants.filter(p => p.status ? ['refund_requested', 'refunded', 'rejected', 'refund_rejected'].includes(p.status) : false);
 
     const [loadingAction, setLoadingAction] = useState<string | null>(null);
     const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -370,7 +370,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ participants }) => {
                         {/* Element Wrapper */}
                         <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'night', variables: { colorPrimary: '#6366f1' } } }}>
                             <RefundPaymentForm
-                                amount={selectedRefund.workshopPrice}
+                                amount={selectedRefund.workshopPrice || 0}
                                 onSuccess={handlePaymentSuccess}
                                 onCancel={() => { setShowPaymentModal(false); setClientSecret(null); setSelectedRefund(null); }}
                             />

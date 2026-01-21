@@ -12,6 +12,6 @@ export interface User {
     customOrdersEnabled?: boolean;
     favorites?: string[];
     registeredWorkshops?: string[];
-    createdAt?: any;
+    createdAt?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     isVerified?: boolean;
 }

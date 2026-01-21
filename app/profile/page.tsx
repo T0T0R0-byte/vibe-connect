@@ -56,7 +56,7 @@ interface Report {
     reason: string;
     status: string;
     details: string;
-    createdAt: any;
+    createdAt: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     vendorResponse?: string;
 }
 
@@ -217,7 +217,7 @@ function ProfileContent() {
             // Since workshop data changes less frequently than status, we can cache or fetch on change.
             // For simplicity in this real-time update, we'll fetch workshop data if needed.
 
-            const promises = regs.map(async (reg: any) => {
+            const promises = regs.map(async (reg: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
                 const wsDoc = await getDoc(doc(db, "workshops", reg.workshopId));
                 if (!wsDoc.exists()) return null;
 

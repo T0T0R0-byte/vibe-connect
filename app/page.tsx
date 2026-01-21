@@ -229,7 +229,7 @@ export default function Home() {
           <div className="col-span-1 md:col-span-2 space-y-8">
             <h2 className="text-2xl font-black text-foreground tracking-tighter uppercase">Vibe<span className="text-primary">Connect.</span></h2>
             <p className="text-muted-foreground max-w-sm font-medium leading-relaxed">
-              Empowering creators and learners through immersive, mentorship-driven workshops. Building the world's largest sanctuary for craft and community.
+              Empowering creators and learners through immersive, mentorship-driven workshops. Building the world&apos;s largest sanctuary for craft and community.
             </p>
             <div className="flex gap-4">
               {['instagram', 'twitter', 'linkedin', 'facebook'].map(s => (
