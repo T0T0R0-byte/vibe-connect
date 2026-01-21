@@ -2,12 +2,21 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
+interface Particle {
+    x: number;
+    y: number;
+    duration: number;
+    delay: number;
+    left: string;
+    top: string;
+}
+
 export const AnimatedBackground = () => {
     const [mounted, setMounted] = useState(false);
-    const [particles, setParticles] = useState<{ x: number; y: number; duration: number; delay: number; left: string; top: string }[]>([]);
+    const [particles, setParticles] = useState<Particle[]>([]);
 
     useEffect(() => {
-        setMounted(true); // eslint-disable-line react-hooks/set-state-in-effect
+        setMounted(true);
         setParticles(Array.from({ length: 6 }).map(() => ({
             x: Math.random() * 1000 - 500,
             y: Math.random() * 1000 - 500,
