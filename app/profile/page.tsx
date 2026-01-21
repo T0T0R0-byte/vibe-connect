@@ -1,44 +1,115 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
-import { doc, updateDoc, getDoc, collection, query, where, getDocs, addDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/firebase/firebaseConfig";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import Image from "next/image";
+import { requestRefund } from "@/firebase/workshopActions";
+import { reportVendor } from "@/firebase/reportActions";
+
+// --- Types ---
 
 interface Workshop {
     id: string;
     title: string;
     description: string;
-    price: number;
     category: string;
     imageUrl: string;
+    imageBase64?: string;
     date: string;
     location: string;
     ageGroup: string;
     rating?: number;
     vendorId: string;
+    whatsappLink?: string;
 }
 
 interface RegisteredWorkshop extends Workshop {
     vendorName: string;
     vendorPhone: string;
-    status?: string;
-    registrationId?: string;
-    refundStatus?: string;
+    status: string;
+    registrationId: string; // Changed to required as it's our key
+    participantName?: string;
     ratingCount?: number;
+    refundId?: string;
 }
 
-export default function ProfilePage() {
+interface CustomRequest {
+    id: string;
+    topic: string;
+    budget: string;
+    status: string;
+    createdAt: { seconds: number };
+    pdfUrl?: string;
+    vendorId: string;
+}
+
+interface Report {
+    id: string;
+    registrationId: string;
+    reason: string;
+    status: string;
+    details: string;
+    createdAt: any;
+    vendorResponse?: string;
+}
+
+// ... (rest of code) ...
+
+
+
+// --- Icons & UI Components ---
+
+const TabButton = ({ active, onClick, label, icon }: { active: boolean; onClick: () => void; label: string; icon: string }) => (
+    <button
+        onClick={onClick}
+        className={`relative px-6 py-3 rounded-full flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-all ${active ? 'text-white' : 'text-muted-foreground hover:text-foreground'}`}
+    >
+        {active && (
+            <motion.div
+                layoutId="activeTab"
+                className="absolute inset-0 bg-white/10 rounded-full border border-white/10"
+                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+            />
+        )}
+        <i className={`fa-solid ${icon} ${active ? 'text-primary' : ''}`}></i>
+        <span className="relative z-10">{label}</span>
+    </button>
+);
+
+const EditInput = ({ label, value, onChange, placeholder, disabled }: { label: string; value: string; onChange?: (v: string) => void; placeholder?: string; disabled?: boolean }) => (
+    <div className="space-y-2">
+        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-[0.2em]">{label}</label>
+        {disabled ? (
+            <div className="w-full px-4 py-3 bg-white/5 border border-white/5 rounded-xl text-muted-foreground font-medium text-sm cursor-not-allowed">
+                {value}
+            </div>
+        ) : (
+            <input
+                value={value}
+                onChange={(e) => onChange?.(e.target.value)}
+                className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl outline-none focus:border-primary/50 text-white font-medium text-sm transition-all focus:bg-black/40"
+                placeholder={placeholder}
+            />
+        )}
+    </div>
+);
+
+// --- Main Component ---
+
+function ProfileContent() {
     const { user, userData, loading } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
     const reviewId = searchParams.get('reviewId');
 
+    // Profile State
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
     const [socialLink, setSocialLink] = useState("");
@@ -47,18 +118,22 @@ export default function ProfilePage() {
     const [photoPreview, setPhotoPreview] = useState("");
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
+
+    // Data State
+    const [activeTab, setActiveTab] = useState<'registrations' | 'favorites' | 'requests'>('registrations');
     const [favorites, setFavorites] = useState<Workshop[]>([]);
     const [registeredWorkshops, setRegisteredWorkshops] = useState<RegisteredWorkshop[]>([]);
+    const [customRequests, setCustomRequests] = useState<CustomRequest[]>([]);
+    const [reportsMap, setReportsMap] = useState<Record<string, Report>>({});
+    const [fetching, setFetching] = useState(true);
 
-    // Review Modal State
+    // Review State
     const [reviewModalOpen, setReviewModalOpen] = useState(false);
     const [selectedWorkshopForReview, setSelectedWorkshopForReview] = useState<RegisteredWorkshop | null>(null);
     const [reviewRating, setReviewRating] = useState(5);
     const [reviewComment, setReviewComment] = useState("");
 
-    // Filters
-    const [search, setSearch] = useState("");
-    const [categoryFilter, setCategoryFilter] = useState("All");
+    // --- Effects ---
 
     useEffect(() => {
         if (!loading && !user) {
@@ -71,10 +146,12 @@ export default function ProfilePage() {
             setPhotoPreview(userData.photoURL || "");
 
             if (userData.role !== 'vendor') {
-                fetchFavorites();
-                fetchRegisteredWorkshops();
+                loadAllData();
+            } else {
+                setFetching(false);
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, userData, loading, router]);
 
     useEffect(() => {
@@ -82,65 +159,119 @@ export default function ProfilePage() {
             const workshopToReview = registeredWorkshops.find(ws => ws.id === reviewId);
             if (workshopToReview) {
                 openReviewModal(workshopToReview);
-                // Clean up URL
                 router.replace('/profile');
             }
         }
     }, [reviewId, registeredWorkshops, router]);
 
-    const fetchFavorites = async () => {
-        if (!userData?.favorites || userData.favorites.length === 0) return;
-        const favs: Workshop[] = [];
-        for (const favId of userData.favorites) {
-            const docSnap = await getDoc(doc(db, "workshops", favId));
-            if (docSnap.exists()) {
-                favs.push({ id: docSnap.id, ...docSnap.data() } as Workshop);
-            }
-        }
-        setFavorites(favs);
+    // --- Data Fetching ---
+
+    const loadAllData = async () => {
+        setFetching(true);
+        await Promise.all([fetchFavorites(), fetchCustomRequests()]); // Removed fetchRegisteredWorkshops from manual load
+        setFetching(false);
     };
 
-    const fetchRegisteredWorkshops = async () => {
-        if (!userData?.registeredWorkshops || userData.registeredWorkshops.length === 0) return;
-        const registered: RegisteredWorkshop[] = [];
-        for (const wsId of userData.registeredWorkshops) {
-            const wsDoc = await getDoc(doc(db, "workshops", wsId));
-            if (wsDoc.exists()) {
+    const fetchFavorites = async () => {
+        if (!userData?.favorites || userData.favorites.length === 0) {
+            setFavorites([]);
+            return;
+        }
+        try {
+            const promises = userData.favorites.map(favId => getDoc(doc(db, "workshops", favId)));
+            const snapshots = await Promise.all(promises);
+            const favs = snapshots.filter(s => s.exists()).map(s => ({ id: s.id, ...s.data() } as Workshop));
+            setFavorites(favs);
+        } catch (e) {
+            console.error("Error fetching favorites", e);
+        }
+    };
+
+    // fetchRegisteredWorkshops removed as it is now a real-time listener effect
+
+    const fetchCustomRequests = async () => {
+        if (!user) return;
+        try {
+            const q = query(collection(db, "custom_requests"), where("userId", "==", user.uid));
+            const snap = await getDocs(q);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            setCustomRequests(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
+        } catch (e) {
+            console.error("Error fetching custom requests", e);
+        }
+    };
+
+    // --- Actions ---
+
+    // Real-time listener for Registered Workshops
+    useEffect(() => {
+        if (!user) return;
+
+        // Listen for all registrations for this user
+        const q = query(collection(db, "registrations"), where("userId", "==", user.uid));
+
+        const unsubscribe = onSnapshot(q, async (snapshot) => {
+            const regs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            // For each registration, we need the workshop data. 
+            // Since workshop data changes less frequently than status, we can cache or fetch on change.
+            // For simplicity in this real-time update, we'll fetch workshop data if needed.
+
+            const promises = regs.map(async (reg: any) => {
+                const wsDoc = await getDoc(doc(db, "workshops", reg.workshopId));
+                if (!wsDoc.exists()) return null;
+
                 const wsData = wsDoc.data() as Workshop;
-                let vendorName = "Unknown Vendor";
-                let vendorPhone = "Not Available";
+                let vendorName = "Unknown";
+                let vendorPhone = "";
 
                 if (wsData.vendorId) {
-                    const vendorDoc = await getDoc(doc(db, "users", wsData.vendorId));
-                    if (vendorDoc.exists()) {
-                        vendorName = vendorDoc.data().displayName || "Unknown Vendor";
-                        vendorPhone = vendorDoc.data().phoneNumber || "Not Available";
+                    // Ideally we should cache this user lookup too
+                    const vDoc = await getDoc(doc(db, "users", wsData.vendorId));
+                    if (vDoc.exists()) {
+                        vendorName = vDoc.data().displayName || vDoc.data().businessName || "Unknown";
+                        vendorPhone = vDoc.data().phoneNumber || "";
                     }
                 }
 
-                let status = "pending";
-                let regId = undefined;
-                let refStatus = "none";
+                const result: RegisteredWorkshop = {
+                    ...wsData,
+                    id: wsDoc.id,
+                    vendorName,
+                    vendorPhone,
+                    status: reg.status,
+                    registrationId: reg.id,
+                    participantName: reg.participantDetails?.fullName || "Guest",
+                    ratingCount: wsData.rating || 0, // approximate mapping
+                    refundId: reg.refundId // Map refundId from registration
+                };
+                return result;
+            });
 
-                const q = query(
-                    collection(db, "registrations"),
-                    where("workshopId", "==", wsId),
-                    where("userId", "==", user?.uid)
-                );
-                const regSnap = await getDocs(q);
-                if (!regSnap.empty) {
-                    status = regSnap.docs[0].data().status || "pending";
-                    regId = regSnap.docs[0].id;
-                    refStatus = regSnap.docs[0].data().refundStatus || "none";
-                }
+            const results = await Promise.all(promises);
+            const validWorkshops = results.filter((w): w is RegisteredWorkshop => w !== null);
+            setRegisteredWorkshops(validWorkshops);
+        });
 
-                registered.push({ ...wsData, id: wsDoc.id, vendorName, vendorPhone, status, registrationId: regId, refundStatus: refStatus });
-            }
-        }
-        setRegisteredWorkshops(registered);
-    };
+        return () => unsubscribe();
+    }, [user]);
 
-    const handleSave = async () => {
+    // Real-time listener for Reports
+    useEffect(() => {
+        if (!user) return;
+        const q = query(collection(db, "reports"), where("reporterId", "==", user.uid));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const map: Record<string, Report> = {};
+            snapshot.docs.forEach(doc => {
+                const data = doc.data() as Omit<Report, 'id'>;
+                map[data.registrationId] = { id: doc.id, ...data };
+            });
+            setReportsMap(map);
+        });
+        return () => unsubscribe();
+    }, [user]);
+
+    const handleSaveProfile = async () => {
         if (!user) return;
         setSaving(true);
         try {
@@ -151,21 +282,54 @@ export default function ProfilePage() {
                 photoURL = await getDownloadURL(storageRef);
             }
 
-            await updateProfile(user, { displayName: name, photoURL: photoURL });
+            await updateProfile(user, { displayName: name, photoURL });
             await updateDoc(doc(db, "users", user.uid), {
                 displayName: name,
                 phoneNumber: phone,
-                photoURL: photoURL,
+                photoURL,
                 ...(userData?.role === 'vendor' && { socialLink, businessName })
             });
 
             setIsEditing(false);
-            router.refresh();
+            window.location.reload();
         } catch (error) {
             console.error(error);
             alert("Failed to update profile.");
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleSubmitReview = async () => {
+        if (!selectedWorkshopForReview || !user) return;
+        try {
+            // 1. Add Review Doc
+            await addDoc(collection(db, "reviews"), {
+                workshopId: selectedWorkshopForReview.id,
+                userId: user.uid,
+                userName: userData?.displayName || "Verified User",
+                rating: reviewRating,
+                comment: reviewComment,
+                createdAt: new Date().toISOString()
+            });
+
+            // 2. Update Workshop Rating
+            const currentCount = selectedWorkshopForReview.ratingCount || 0;
+            const currentRating = selectedWorkshopForReview.rating || 5;
+            const newCount = currentCount + 1;
+            const newAverage = ((currentRating * currentCount) + reviewRating) / newCount;
+
+            await updateDoc(doc(db, "workshops", selectedWorkshopForReview.id), {
+                rating: Number(newAverage.toFixed(1)),
+                ratingCount: newCount
+            });
+
+            setReviewModalOpen(false);
+            // No need to fetch registered workshops manually, if workshop update triggers something (though ratings won't show here unless we listen to workshop too).
+            // For now, valid enough.
+        } catch (error) {
+            console.error("Review failed", error);
+            alert("Could not submit review.");
         }
     };
 
@@ -176,254 +340,479 @@ export default function ProfilePage() {
         setReviewModalOpen(true);
     };
 
-    const handleSubmitReview = async () => {
-        if (!selectedWorkshopForReview || !user) return;
+    const [refundModalOpen, setRefundModalOpen] = useState(false);
+    const [selectedRegistrationForRefund, setSelectedRegistrationForRefund] = useState<string | null>(null);
+    const [refundReason, setRefundReason] = useState("");
+
+    const openRefundModal = (regId: string) => {
+        setSelectedRegistrationForRefund(regId);
+        setRefundReason("");
+        setRefundModalOpen(true);
+    };
+
+    const submitRefundRequest = async () => {
+        if (!selectedRegistrationForRefund) return;
+        if (!refundReason.trim()) {
+            alert("Please provide a reason for the refund.");
+            return;
+        }
+
         try {
-            await addDoc(collection(db, "reviews"), {
-                workshopId: selectedWorkshopForReview.id,
-                userId: user.uid,
-                userName: userData?.displayName || "Anonymous",
-                rating: reviewRating,
-                comment: reviewComment,
-                createdAt: new Date().toISOString()
-            });
-
-            const newCount = (selectedWorkshopForReview.ratingCount || 0) + 1;
-            const newRating = ((selectedWorkshopForReview.rating || 0) * (selectedWorkshopForReview.ratingCount || 0) + reviewRating) / newCount;
-
-            await updateDoc(doc(db, "workshops", selectedWorkshopForReview.id), {
-                rating: newRating,
-                ratingCount: newCount
-            });
-
-            setReviewModalOpen(false);
-            fetchRegisteredWorkshops();
+            await requestRefund(selectedRegistrationForRefund, refundReason);
+            alert("Refund request submitted successfully!");
+            setRefundModalOpen(false);
         } catch (error) {
-            console.error(error);
-            alert("Failed to submit review.");
+            console.error("Refund request failed", error);
+            alert(error instanceof Error ? error.message : "Request failed");
         }
     };
 
-    const filteredFavorites = favorites.filter(w =>
-        w.title.toLowerCase().includes(search.toLowerCase()) &&
-        (categoryFilter === "All" || w.category === categoryFilter)
+    // --- Report Logic ---
+    const [reportModalOpen, setReportModalOpen] = useState(false);
+    const [selectedRegistrationForReport, setSelectedRegistrationForReport] = useState<RegisteredWorkshop | null>(null);
+    const [reportReason, setReportReason] = useState("");
+    const [reportDetails, setReportDetails] = useState("");
+
+    const openReportModal = (ws: RegisteredWorkshop) => {
+        setSelectedRegistrationForReport(ws);
+        setReportReason("Refund Delayed");
+        setReportDetails("");
+        setReportModalOpen(true);
+    };
+
+    const submitReport = async () => {
+        if (!selectedRegistrationForReport || !user) return;
+
+        try {
+            await reportVendor(
+                selectedRegistrationForReport.registrationId,
+                selectedRegistrationForReport.id,
+                selectedRegistrationForReport.vendorId,
+                user.uid,
+                userData?.displayName || "User",
+                reportReason,
+                reportDetails
+            );
+
+            alert("Report submitted. Support will review it shortly.");
+            setReportModalOpen(false);
+        } catch (error) {
+            console.error(error);
+            alert("Failed to submit report.");
+        }
+    };
+
+    // --- Render ---
+
+    if (loading) return (
+        <div className="min-h-screen bg-black flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-primary"></div>
+        </div>
     );
 
-    if (loading) return <div className="min-h-screen pt-32 text-center text-white font-black uppercase tracking-widest text-xs animate-pulse">Loading Profile...</div>;
-
     return (
-        <div className="min-h-screen bg-background relative overflow-hidden pb-20 pt-28">
-            <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-primary/5 blur-[150px] -z-10 rounded-full animate-vibe-float" />
-            <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-indigo-500/5 blur-[120px] -z-10 rounded-full animate-vibe-float" style={{ animationDelay: '2s' }} />
+        <div className="min-h-screen bg-transparent text-foreground relative pb-20 pt-32 px-6">
 
-            <div className="max-w-7xl mx-auto px-6">
-                {/* Profile Header Card */}
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card shadow-3xl mb-12">
-                    <div className="flex flex-col lg:flex-row gap-12 items-center lg:items-start">
+            {/* 1. Header Section - Glass Card */}
+            <div className="max-w-6xl mx-auto mb-16">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative rounded-[2.5rem] bg-white/[0.03] dark:bg-black/30 backdrop-blur-3xl border border-white/10 overflow-hidden p-8 md:p-12 flex flex-col md:flex-row gap-10 items-center md:items-start"
+                >
+                    {/* Ambient Glow */}
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 blur-[100px] rounded-full pointer-events-none -z-10" />
 
+                    {/* Avatar */}
+                    <div className="relative group shrink-0">
+                        <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden border-4 border-white/5 shadow-2xl relative">
+                            <Image
+                                src={photoPreview || userData?.photoURL || "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"}
+                                alt="Profile"
+                                fill
+                                className="object-cover"
+                            />
+                            {isEditing && (
+                                <label className="absolute inset-0 bg-black/60 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <i className="fa-solid fa-camera text-white text-2xl"></i>
+                                    <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                                        if (e.target.files?.[0]) {
+                                            setPhoto(e.target.files[0]);
+                                            setPhotoPreview(URL.createObjectURL(e.target.files[0]));
+                                        }
+                                    }} />
+                                </label>
+                            )}
+                        </div>
+                    </div>
 
-                        {/* Info Section */}
-                        <div className="flex-grow w-full">
-                            <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-6 mb-10">
-                                <div className="text-center md:text-left">
-                                    <h1 className="text-4xl font-black text-foreground tracking-tighter uppercase leading-[0.8] mb-2">
-                                        {userData?.displayName || 'Unknown User'}
-                                    </h1>
-                                    <p className="text-muted-foreground font-bold text-[10px] uppercase tracking-widest">{user?.email}</p>
-                                </div>
-                                <div className="flex gap-3">
-                                    {!isEditing ? (
-                                        <button onClick={() => setIsEditing(true)} className="btn-vibe-primary px-8 !py-3 !text-[10px]">
-                                            Edit Profile
-                                        </button>
-                                    ) : (
-                                        <>
-                                            <button onClick={() => setIsEditing(false)} className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">Cancel</button>
-                                            <button onClick={handleSave} disabled={saving} className="btn-vibe-primary px-6 !py-3 !text-[10px]">{saving ? "Saving..." : "Save Changes"}</button>
-                                        </>
-                                    )}
-                                </div>
+                    {/* Details */}
+                    <div className="flex-1 w-full space-y-8">
+                        <div className="flex justify-between items-start w-full">
+                            <div>
+                                <h1 className="text-3xl md:text-5xl font-black tracking-tight mb-2">{userData?.displayName || "Welcome Back"}</h1>
+                                <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs flex items-center gap-2">
+                                    <i className="fa-solid fa-envelope"></i> {user?.email}
+                                </p>
                             </div>
+                            <button
+                                onClick={() => isEditing ? handleSaveProfile() : setIsEditing(true)}
+                                disabled={saving}
+                                className={`px-6 py-3 rounded-xl font-bold uppercase tracking-widest text-[10px] transition-all ${isEditing ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-white'}`}
+                            >
+                                {saving ? "Saving..." : isEditing ? "Save Changes" : "Edit Profile"}
+                            </button>
+                        </div>
 
-                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Full Name</label>
-                                    {isEditing ? (
-                                        <input value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 bg-secondary/50 border border-border rounded-xl outline-none focus:border-primary transition-all font-bold text-sm text-foreground" placeholder="John Doe" />
-                                    ) : (
-                                        <p className="px-4 py-3 bg-card border border-border rounded-xl font-bold text-sm text-foreground">{name}</p>
-                                    )}
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Phone Number</label>
-                                    {isEditing ? (
-                                        <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full px-4 py-3 bg-secondary/50 border border-border rounded-xl outline-none focus:border-primary transition-all font-bold text-sm text-foreground" placeholder="+91" />
-                                    ) : (
-                                        <p className="px-4 py-3 bg-card border border-border rounded-xl font-bold text-sm text-foreground">{phone || "Not Set"}</p>
-                                    )}
-                                </div>
-                                {userData?.role === 'vendor' && (
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Social Link</label>
-                                        {isEditing ? (
-                                            <input value={socialLink} onChange={e => setSocialLink(e.target.value)} className="w-full px-4 py-3 bg-secondary/50 border border-border rounded-xl outline-none focus:border-primary transition-all font-bold text-sm text-foreground" placeholder="https://" />
-                                        ) : (
-                                            <a href={socialLink} target="_blank" className="px-4 py-3 bg-card border border-border rounded-xl font-bold text-sm text-primary hover:underline block truncate">{socialLink || "Not Set"}</a>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                        {/* Editable Fields Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-3xl bg-white/[0.02] border border-white/5">
+                            <EditInput label="Display Name" value={name} onChange={setName} disabled={!isEditing} />
+                            <EditInput label="Phone Number" value={phone} onChange={setPhone} disabled={!isEditing} placeholder="+94 77 123 4567" />
+                            {userData?.role === 'vendor' && (
+                                <EditInput label="Business Name" value={businessName} onChange={setBusinessName} disabled={!isEditing} />
+                            )}
+                            {userData?.role === 'vendor' && (
+                                <EditInput label="Social Link" value={socialLink} onChange={setSocialLink} disabled={!isEditing} />
+                            )}
                         </div>
                     </div>
                 </motion.div>
-
-                {/* Content Tabs / Sections */}
-                {userData?.role !== 'vendor' && (
-                    <div className="space-y-16">
-                        {/* Registrations */}
-                        <section>
-                            <div className="flex items-center gap-4 mb-8">
-                                <i className="fa-solid fa-ticket text-primary text-xl"></i>
-                                <h2 className="text-2xl font-black text-foreground tracking-tighter uppercase">My Registrations</h2>
-                            </div>
-
-                            {registeredWorkshops.length > 0 ? (
-                                <div className="grid lg:grid-cols-2 gap-6">
-                                    {registeredWorkshops.map((ws) => (
-                                        <div key={ws.id} className="glass-card flex flex-col sm:flex-row gap-6 p-6 group hover:bg-white/5 transition-all duration-500 relative overflow-hidden">
-                                            {/* Status Badge */}
-                                            <div className="absolute top-4 right-4 z-10">
-                                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border backdrop-blur-md shadow-xl ${ws.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                                                    ws.status === 'refunded' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                                                        'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                                                    }`}>
-                                                    {ws.status}
-                                                </span>
-                                            </div>
-
-
-
-                                            <div className="flex-grow min-w-0 flex flex-col justify-between py-1">
-                                                <div>
-                                                    <h3 className="text-xl font-black text-foreground uppercase tracking-tighter truncate mb-2 group-hover:text-primary transition-colors">{ws.title}</h3>
-                                                    <div className="flex flex-wrap gap-x-6 gap-y-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-4">
-                                                        <span className="flex items-center gap-2"><i className="fa-solid fa-calendar text-primary"></i> {new Date(ws.date).toLocaleDateString()}</span>
-                                                        <span className="flex items-center gap-2"><i className="fa-solid fa-user-tie text-indigo-500"></i> {ws.vendorName}</span>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex flex-wrap items-center gap-3 mt-auto">
-                                                    <button onClick={() => openReviewModal(ws)} className="btn-vibe-secondary !text-[9px] !py-2 !px-4 flex items-center gap-2">
-                                                        <i className="fa-solid fa-star"></i> Review
-                                                    </button>
-
-                                                    {(ws.status === 'paid' || ws.status === 'pending' || ws.status === 'approved') && ws.refundStatus === 'none' && (
-                                                        <button onClick={async () => {
-                                                            if (confirm("Do you want to request a refund/cancellation for this workshop? This action cannot be undone.")) {
-                                                                const { requestRefund } = await import('@/firebase/refundActions');
-                                                                if (ws.registrationId) { await requestRefund(ws.registrationId); fetchRegisteredWorkshops(); }
-                                                            }
-                                                        }} className="px-4 py-2 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 group/refund">
-                                                            <i className="fa-solid fa-rotate-left group-hover/refund:-rotate-45 transition-transform"></i>
-                                                            Ask for Refund
-                                                        </button>
-                                                    )}
-
-                                                    {ws.refundStatus === 'refund_requested' && (
-                                                        <span className="px-4 py-2 bg-amber-500/5 border border-amber-500/20 text-amber-500 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
-                                                            <i className="fa-solid fa-clock-rotate-left animate-spin-slow"></i>
-                                                            Refund Pending
-                                                        </span>
-                                                    )}
-
-                                                    {ws.status === 'refunded' && (
-                                                        <span className="px-4 py-2 bg-red-500/5 border border-red-500/20 text-red-500/70 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
-                                                            <i className="fa-solid fa-ban"></i>
-                                                            Refunded
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="glass-card py-20 text-center">
-                                    <p className="text-muted-foreground font-black text-[10px] uppercase tracking-widest">No active workshops found.</p>
-                                </div>
-                            )}
-                        </section>
-
-                        {/* Favorites */}
-                        <section>
-                            <div className="flex justify-between items-center mb-8">
-                                <div className="flex items-center gap-4">
-                                    <i className="fa-solid fa-heart text-primary text-xl"></i>
-                                    <h2 className="text-2xl font-black text-foreground tracking-tighter uppercase">My Favorites</h2>
-                                </div>
-                                <div className="flex gap-4">
-                                    <input placeholder="Search favorites..." value={search} onChange={e => setSearch(e.target.value)} className="bg-white/5 border border-white/10 px-4 py-2 rounded-xl text-[10px] font-bold text-white outline-none focus:border-primary transition-all w-48" />
-                                </div>
-                            </div>
-
-                            {filteredFavorites.length > 0 ? (
-                                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                                    {filteredFavorites.map((w) => (
-                                        <Link href={`/register/${w.id}`} key={w.id} className="glass-card !p-0 group hover:border-primary/30 transition-all overflow-hidden flex flex-col bg-card/60">
-                                            <div className="h-32 w-full relative overflow-hidden bg-secondary/50">
-                                                {w.imageUrl ? (
-                                                    <img src={w.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                                                ) : (
-                                                    <div className="flex items-center justify-center h-full text-muted-foreground"><i className="fa-solid fa-image text-2xl"></i></div>
-                                                )}
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-60" />
-                                                <div className="absolute bottom-3 left-3">
-                                                    <span className="text-[9px] font-black uppercase text-white bg-primary/20 backdrop-blur-md border border-primary/30 px-2 py-1 rounded-lg tracking-widest">{w.category}</span>
-                                                </div>
-                                            </div>
-                                            <div className="p-4 flex flex-col gap-1">
-                                                <h3 className="text-sm font-black text-foreground uppercase tracking-tighter truncate group-hover:text-primary transition-colors">{w.title}</h3>
-                                                <div className="flex justify-between items-center mt-2">
-                                                    <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1"><i className="fa-solid fa-location-dot"></i> {w.location || "Online"}</span>
-                                                    <span className="text-[10px] font-black text-emerald-500 uppercase">Rs. {w.price}</span>
-                                                </div>
-                                            </div>
-                                        </Link>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="glass-card py-20 text-center">
-                                    <p className="text-muted-foreground font-black text-[10px] uppercase tracking-widest">No favorites saved.</p>
-                                </div>
-                            )}
-                        </section>
-                    </div>
-                )}
             </div>
 
-            {/* Review Modal */}
-            <AnimatePresence>
-                {reviewModalOpen && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setReviewModalOpen(false)} className="absolute inset-0 bg-background/80 backdrop-blur-md" />
-                        <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="glass-card !p-10 w-full max-w-md relative z-10 shadow-3xl">
-                            <h3 className="text-2xl font-black text-foreground uppercase tracking-tighter mb-8 text-center">Write a Review</h3>
-                            <div className="flex justify-center gap-3 mb-8">
-                                {[1, 2, 3, 4, 5].map(s => (
-                                    <button key={s} onClick={() => setReviewRating(s)} className={`text-2xl transition-all hover:scale-110 ${s <= reviewRating ? 'text-primary' : 'text-white/10'}`}>
-                                        <i className="fa-solid fa-star"></i>
-                                    </button>
-                                ))}
+            {/* 2. Content Tabs */}
+            {userData?.role !== 'vendor' && (
+                <div className="max-w-6xl mx-auto min-h-[500px]">
+                    <div className="flex items-center gap-2 mb-10 overflow-x-auto pb-4 no-scrollbar">
+                        <TabButton
+                            active={activeTab === 'registrations'}
+                            onClick={() => setActiveTab('registrations')}
+                            label="My Learnings"
+                            icon="fa-graduation-cap"
+                        />
+                        <TabButton
+                            active={activeTab === 'favorites'}
+                            onClick={() => setActiveTab('favorites')}
+                            label="Favorites"
+                            icon="fa-heart"
+                        />
+                        <TabButton
+                            active={activeTab === 'requests'}
+                            onClick={() => setActiveTab('requests')}
+                            label="Custom Requests"
+                            icon="fa-wand-magic-sparkles"
+                        />
+                    </div>
+
+                    {/* Tab Content */}
+                    <div className="relative">
+                        {fetching ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {[1, 2, 3].map(n => <div key={n} className="h-40 bg-white/5 rounded-3xl animate-pulse" />)}
                             </div>
-                            <textarea value={reviewComment} onChange={e => setReviewComment(e.target.value)} placeholder="Write your review here..." className="w-full h-32 bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold text-sm outline-none focus:border-primary transition-all mb-8 resize-none" />
+                        ) : (
+                            <AnimatePresence mode="wait">
+                                {activeTab === 'registrations' && (
+                                    <motion.div
+                                        key="registrations"
+                                        initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
+                                        className="grid grid-cols-1 md:grid-cols-2 gap-6"
+                                    >
+                                        {registeredWorkshops.length === 0 ? (
+                                            <EmptyState icon="fa-ghost" title="No registrations yet" sub="Ready to start learning?" link="/workshops" linkText="Browse Workshops" />
+                                        ) : registeredWorkshops.map(ws => {
+                                            const existingReport = reportsMap[ws.registrationId];
+                                            return (
+                                                <div key={ws.registrationId} className="group relative bg-white/[0.03] dark:bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 hover:border-primary/30 transition-all flex gap-6 overflow-hidden">
+                                                    <div className="absolute top-0 right-0 p-4 opacity-50 text-[100px] leading-none text-white/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform">
+                                                        <i className="fa-solid fa-ticket"></i>
+                                                    </div>
+
+                                                    <div className="flex-1 relative z-10 flex flex-col h-full">
+                                                        <div className="flex justify-between items-start mb-4">
+                                                            <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${ws.status === 'confirmed' ? 'bg-green-500/10 text-green-500' :
+                                                                ws.status === 'refunded' ? 'bg-green-500/10 text-green-500' : 'bg-amber-500/10 text-amber-500'
+                                                                }`}>
+                                                                {ws.status}
+                                                            </span>
+                                                            {ws.refundId && (
+                                                                <span className="text-[9px] font-mono text-muted-foreground border border-white/10 px-2 py-1 rounded bg-black/20">
+                                                                    {ws.refundId}
+                                                                </span>
+                                                            )}
+                                                            {ws.participantName && (
+                                                                <span className="text-[9px] font-black text-primary/60 uppercase tracking-widest flex items-center gap-1">
+                                                                    <i className="fa-solid fa-user-tag"></i> {ws.participantName}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <h3 className="text-xl font-bold text-white mb-1 line-clamp-1">{ws.title}</h3>
+                                                        <p className="text-xs text-muted-foreground mb-6 flex items-center gap-2">
+                                                            <i className="fa-solid fa-calendar"></i> {new Date(ws.date).toLocaleDateString()}
+                                                        </p>
+
+                                                        <div className="mt-auto flex items-center gap-3">
+                                                            {ws.status !== 'refunded' && ws.status !== 'refund_requested' && (
+                                                                <button
+                                                                    onClick={() => openReviewModal(ws)}
+                                                                    className="px-4 py-2 bg-white text-black text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-primary/20 transition-colors"
+                                                                >
+                                                                    Write Review
+                                                                </button>
+                                                            )}
+
+                                                            {ws.status === 'confirmed' && (
+                                                                <button
+                                                                    onClick={() => openRefundModal(ws.registrationId)}
+                                                                    className="px-4 py-2 bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
+                                                                >
+                                                                    Request Refund
+                                                                </button>
+                                                            )}
+                                                            {ws.status === 'refund_requested' && (
+                                                                <div className="flex gap-2 items-center">
+                                                                    <span className="px-4 py-2 bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-amber-500/20 flex items-center gap-2">
+                                                                        <i className="fa-solid fa-clock"></i> Refund Pending
+                                                                    </span>
+                                                                    {existingReport ? (
+                                                                        <span className="px-3 py-1.5 bg-red-500/10 text-red-400 text-[9px] font-black uppercase tracking-widest rounded-lg border border-red-500/20">
+                                                                            Reported
+                                                                        </span>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => openReportModal(ws)}
+                                                                            className="px-4 py-2 bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                                                                            title="Report if vendor is unresponsive"
+                                                                        >
+                                                                            <i className="fa-solid fa-flag"></i> Report
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            {(ws.status === 'rejected' || ws.status === 'refund_rejected') && (
+                                                                <button
+                                                                    onClick={() => openReportModal(ws)}
+                                                                    className="px-4 py-2 bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                                                                >
+                                                                    <i className="fa-solid fa-triangle-exclamation"></i> Report Issue
+                                                                </button>
+                                                            )}
+                                                            {ws.whatsappLink && ws.status !== 'refunded' && (
+                                                                <a href={ws.whatsappLink} target="_blank" className="px-4 py-2 bg-[#25D366]/10 text-[#25D366] text-[10px] font-bold uppercase tracking-widest rounded-lg border border-[#25D366]/20 hover:bg-[#25D366]/20 transition-colors">
+                                                                    <i className="fa-brands fa-whatsapp"></i> Chat
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'favorites' && (
+                                    <motion.div
+                                        key="favorites"
+                                        initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
+                                        className="grid grid-cols-2 md:grid-cols-4 gap-6"
+                                    >
+                                        {favorites.length === 0 ? (
+                                            <EmptyState icon="fa-heart-crack" title="No favorites saved" sub="Find something you love." link="/workshops" linkText="Explore Vibe" />
+                                        ) : favorites.map(ws => (
+                                            <Link href={`/register/${ws.id}`} key={ws.id} className="group relative aspect-[4/5] rounded-3xl overflow-hidden bg-background/50 border border-white/5">
+                                                <Image src={ws.imageUrl || "https://images.unsplash.com/photo-1513364776144-60967b0f800f"} alt={ws.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                                                <div className="absolute bottom-0 left-0 p-5">
+                                                    <span className="text-[9px] font-black text-primary uppercase tracking-widest mb-1 block">{ws.category}</span>
+                                                    <h3 className="text-white font-bold text-sm leading-tight">{ws.title}</h3>
+                                                </div>
+                                            </Link>
+                                        ))}
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'requests' && (
+                                    <motion.div
+                                        key="requests"
+                                        initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
+                                        className="grid grid-cols-1 md:grid-cols-2 gap-6"
+                                    >
+                                        {customRequests.length === 0 ? (
+                                            <EmptyState icon="fa-wand-magic" title="No requests found" sub="Have a unique idea?" link="/custom-request" linkText="Create Request" />
+                                        ) : customRequests.map(req => (
+                                            <div key={req.id} className="p-6 rounded-3xl bg-white/[0.03] dark:bg-black/20 backdrop-blur-xl border border-white/10 flex flex-col justify-between h-48 group hover:border-primary/20 transition-all">
+                                                <div>
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <h3 className="text-lg font-bold text-white">{req.topic}</h3>
+                                                        <span className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-widest ${req.status === 'accepted' ? 'bg-green-500/10 text-green-500' : 'bg-slate-500/10 text-slate-500'}`}>{req.status}</span>
+                                                    </div>
+                                                    <p className="text-muted-foreground text-xs font-medium">Budget: LKR {req.budget}</p>
+                                                </div>
+                                                <div className="flex justify-between items-end border-t border-white/5 pt-4">
+                                                    <span className="text-[9px] text-muted-foreground/60 font-bold uppercase tracking-widest">{req.createdAt?.seconds ? new Date(req.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}</span>
+                                                    <button className="text-muted-foreground hover:text-white transition-colors text-xs flex items-center gap-2">
+                                                        Details <i className="fa-solid fa-arrow-right"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        )}
+                    </div>
+                </div>
+            )
+            }
+
+            {/* Refund Request Modal */}
+            <AnimatePresence>
+                {refundModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            onClick={() => setRefundModalOpen(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-xl"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 30 }}
+                            className="relative w-full max-w-lg bg-[#0F0F0F] border border-white/10 rounded-[2rem] p-10 overflow-hidden shadow-2xl"
+                        >
+                            <div className="text-center mb-8">
+                                <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Request Refund</h2>
+                                <p className="text-muted-foreground text-sm">We&apos;re sorry to see you go. Please tell us why.</p>
+                            </div>
+
+                            <textarea
+                                value={refundReason}
+                                onChange={e => setRefundReason(e.target.value)}
+                                placeholder="E.g., Scheduling conflict, unexpected emergency..."
+                                className="w-full h-32 bg-white/5 border border-white/5 rounded-2xl p-4 text-sm text-white focus:outline-none focus:border-white/20 transition-all resize-none mb-8"
+                            />
+
                             <div className="grid grid-cols-2 gap-4">
-                                <button onClick={() => setReviewModalOpen(false)} className="px-6 py-4 bg-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">Cancel</button>
-                                <button onClick={handleSubmitReview} className="btn-vibe-primary !py-4 !text-[10px]">Submit Review</button>
+                                <button onClick={() => setRefundModalOpen(false)} className="py-4 rounded-xl bg-white/5 text-muted-foreground font-bold uppercase text-[10px] tracking-widest hover:bg-white/10 transition-colors">Cancel</button>
+                                <button onClick={submitRefundRequest} className="py-4 rounded-xl bg-red-500 text-white font-bold uppercase text-[10px] tracking-widest hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20">Submit Request</button>
                             </div>
                         </motion.div>
                     </div>
                 )}
             </AnimatePresence>
-        </div>
+
+            {/* Review Modal Overlay */}
+            <AnimatePresence>
+                {reviewModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            onClick={() => setReviewModalOpen(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-xl"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 30 }}
+                            className="relative w-full max-w-lg bg-[#0F0F0F] border border-white/10 rounded-[2rem] p-10 overflow-hidden shadow-2xl"
+                        >
+                            <div className="text-center mb-8">
+                                <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Rate Experience</h2>
+                                <p className="text-muted-foreground text-sm">How was {selectedWorkshopForReview?.title}?</p>
+                            </div>
+
+                            <div className="flex justify-center gap-4 mb-8">
+                                {[1, 2, 3, 4, 5].map(star => (
+                                    <button
+                                        key={star}
+                                        onClick={() => setReviewRating(star)}
+                                        onMouseEnter={() => setReviewRating(star)}
+                                        className="text-3xl transition-transform hover:scale-110 active:scale-95"
+                                    >
+                                        <i className={`fa-solid fa-star ${star <= reviewRating ? 'text-amber-500' : 'text-white/5'}`}></i>
+                                    </button>
+                                ))}
+                            </div>
+
+                            <textarea
+                                value={reviewComment}
+                                onChange={e => setReviewComment(e.target.value)}
+                                placeholder="Share your thoughts about the workshop..."
+                                className="w-full h-32 bg-white/5 border border-white/5 rounded-2xl p-4 text-sm text-white focus:outline-none focus:border-white/20 transition-all resize-none mb-8"
+                            />
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <button onClick={() => setReviewModalOpen(false)} className="py-4 rounded-xl bg-white/5 text-muted-foreground font-bold uppercase text-[10px] tracking-widest hover:bg-white/10 transition-colors">Cancel</button>
+                                <button onClick={handleSubmitReview} className="py-4 rounded-xl bg-white text-black font-bold uppercase text-[10px] tracking-widest hover:bg-primary/20 transition-colors">Submit Review</button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Report Modal */}
+            <AnimatePresence>
+                {reportModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            onClick={() => setReportModalOpen(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-xl"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 30 }}
+                            className="relative w-full max-w-lg bg-[#0F0F0F] border border-white/10 rounded-[2rem] p-10 overflow-hidden shadow-2xl"
+                        >
+                            <div className="text-center mb-8">
+                                <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Report Vendor</h2>
+                                <p className="text-muted-foreground text-sm">Facing an issue? Let us know.</p>
+                            </div>
+
+                            <div className="space-y-4 mb-8">
+                                <label className="block text-xs font-bold uppercase text-muted-foreground tracking-widest">Reason</label>
+                                <select
+                                    value={reportReason}
+                                    onChange={(e) => setReportReason(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/5 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-white/20 appearance-none"
+                                >
+                                    <option value="Refund Delayed">Refunding taking too long</option>
+                                    <option value="Unfair Rejection">Refund rejected unfairly</option>
+                                    <option value="Unresponsive Vendor">Vendor not responding</option>
+                                    <option value="Other">Other</option>
+                                </select>
+
+                                <label className="block text-xs font-bold uppercase text-muted-foreground tracking-widest mt-4">Details</label>
+                                <textarea
+                                    value={reportDetails}
+                                    onChange={e => setReportDetails(e.target.value)}
+                                    placeholder="Describe the issue..."
+                                    className="w-full h-32 bg-white/5 border border-white/5 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-white/20 transition-all resize-none"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <button onClick={() => setReportModalOpen(false)} className="py-4 rounded-xl bg-white/5 text-muted-foreground font-bold uppercase text-[10px] tracking-widest hover:bg-white/10 transition-colors">Cancel</button>
+                                <button onClick={submitReport} className="py-4 rounded-xl bg-red-500 text-white font-bold uppercase text-[10px] tracking-widest hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20">Submit Report</button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+        </div >
+    );
+}
+
+const EmptyState = ({ icon, title, sub, link, linkText }: { icon: string; title: string, sub: string, link: string, linkText: string }) => (
+    <div className="col-span-full py-20 flex flex-col items-center justify-center text-center opacity-50 hover:opacity-100 transition-opacity">
+        <i className={`fa-solid ${icon} text-4xl mb-4 text-primary/40`}></i>
+        <h3 className="text-xl font-bold text-foreground/80">{title}</h3>
+        <p className="text-sm text-muted-foreground mb-6">{sub}</p>
+        <Link href={link} className="px-6 py-2 border border-white/10 rounded-full text-muted-foreground text-xs font-bold uppercase tracking-widest hover:bg-white/5 transition-all">
+            {linkText}
+        </Link>
+    </div>
+);
+
+export default function ProfilePage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-black" />}>
+            <ProfileContent />
+        </Suspense>
     );
 }

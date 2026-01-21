@@ -8,6 +8,8 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { AuthBear } from "@/app/components/AuthBear";
+import { AnimatedBackground } from "@/app/components/AnimatedBackground";
 
 export default function RegisterPage() {
     const [name, setName] = useState("");
@@ -16,6 +18,7 @@ export default function RegisterPage() {
     const [role, setRole] = useState<"user" | "vendor">("user");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [isPasswordFocused, setIsPasswordFocused] = useState(false);
     const router = useRouter();
 
     // Vendor Specific State
@@ -63,6 +66,7 @@ export default function RegisterPage() {
             });
 
             router.push("/");
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -72,8 +76,7 @@ export default function RegisterPage() {
 
     return (
         <div className="min-h-screen flex items-center justify-center px-6 py-24 bg-background relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/5 blur-[150px] -z-10 rounded-full animate-vibe-float" />
-            <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-500/5 blur-[120px] -z-10 rounded-full animate-vibe-float" style={{ animationDelay: '2s' }} />
+            <AnimatedBackground />
 
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -81,9 +84,7 @@ export default function RegisterPage() {
                 className="w-full max-w-xl glass-card !p-10 shadow-3xl"
             >
                 <div className="text-center mb-10">
-                    <div className="inline-block p-4 rounded-[2rem] bg-primary/10 mb-6 border border-primary/20 text-primary">
-                        <i className="fa-solid fa-user-astronaut text-3xl"></i>
-                    </div>
+                    <AuthBear inputLength={email.length} isPasswordFocused={isPasswordFocused} />
                     <h2 className="text-4xl font-black text-foreground tracking-tighter uppercase leading-[0.8] mb-3">
                         Join the <span className="text-primary">Vibe</span>
                     </h2>
@@ -101,8 +102,8 @@ export default function RegisterPage() {
                         <div className="space-y-2">
                             <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Identity Class</label>
                             <div className="flex gap-3">
-                                <button type="button" onClick={() => setRole("user")} className={`flex-1 py-4 rounded-2xl border transition-all font-black text-[10px] uppercase tracking-widest ${role === "user" ? "bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-[1.02]" : "bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10"}`}>Citizen</button>
-                                <button type="button" onClick={() => setRole("vendor")} className={`flex-1 py-4 rounded-2xl border transition-all font-black text-[10px] uppercase tracking-widest ${role === "vendor" ? "bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-[1.02]" : "bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10"}`}>Mentor</button>
+                                <button type="button" onClick={() => setRole("user")} className={`flex-1 py-4 rounded-2xl border transition-all font-black text-[10px] uppercase tracking-widest ${role === "user" ? "bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-[1.02]" : "bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10"}`}>User</button>
+                                <button type="button" onClick={() => setRole("vendor")} className={`flex-1 py-4 rounded-2xl border transition-all font-black text-[10px] uppercase tracking-widest ${role === "vendor" ? "bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-[1.02]" : "bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10"}`}>Vendor</button>
                             </div>
                         </div>
                     </div>
@@ -113,13 +114,13 @@ export default function RegisterPage() {
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Email Node</label>
+                        <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Email</label>
                         <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-6 py-4 bg-white/5 text-foreground border border-white/10 rounded-2xl focus:border-primary focus:bg-white/10 outline-none transition-all font-bold text-sm" required placeholder="name@vibe.io" />
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
-                        <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Secure Key</label>
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-6 py-4 bg-white/5 text-foreground border border-white/10 rounded-2xl focus:border-primary focus:bg-white/10 outline-none transition-all font-bold text-sm" required placeholder="••••••••" />
+                        <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Password</label>
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} onFocus={() => setIsPasswordFocused(true)} onBlur={() => setIsPasswordFocused(false)} className="w-full px-6 py-4 bg-white/5 text-foreground border border-white/10 rounded-2xl focus:border-primary focus:bg-white/10 outline-none transition-all font-bold text-sm" required placeholder="••••••••" />
                     </div>
 
                     <AnimatePresence>

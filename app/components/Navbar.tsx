@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "@/app/context/AuthContext";
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -12,6 +12,19 @@ export default function Navbar() {
     const pathname = usePathname();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
+    const [logoClickCount, setLogoClickCount] = useState(0);
+    const router = useRouter();
+
+    const handleLogoClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const newCount = logoClickCount + 1;
+        setLogoClickCount(newCount);
+        if (newCount >= 5) {
+            router.push('/admin/login');
+            setLogoClickCount(0);
+        }
+    };
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -32,7 +45,7 @@ export default function Navbar() {
         >
             <nav className="flex justify-between items-center relative">
                 <Link href="/" className="flex items-center gap-3 group">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/20 group-hover:rotate-12 transition-all">
+                    <div onClick={handleLogoClick} className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/20 group-hover:rotate-12 transition-all cursor-pointer">
                         V
                     </div>
                     <span className="text-2xl font-black tracking-tighter uppercase leading-[0.8] text-foreground group-hover:text-primary transition-colors">
@@ -79,7 +92,7 @@ export default function Navbar() {
                                         {userData?.photoURL ? (
                                             <img src={userData.photoURL} alt="Profile" className="w-full h-full object-cover" />
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-white font-black text-xs uppercase tracking-tighter">
+                                            <div className="w-full h-full flex items-center justify-center bg-primary/20 text-white font-black text-xs uppercase tracking-tighter">
                                                 {userData?.displayName?.[0] || "?"}
                                             </div>
                                         )}
@@ -101,6 +114,7 @@ export default function Navbar() {
                                         <i className="fa-solid fa-store text-indigo-400"></i> Vendor Dashboard
                                     </Link>
                                 )}
+                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                 {(userData?.email === "admin@vibe.com" || (userData as any)?.role === 'admin') && (
                                     <Link href="/admin" className="flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white/5 transition-colors text-red-400">
                                         <i className="fa-solid fa-shield-halved"></i> Admin Dashboard

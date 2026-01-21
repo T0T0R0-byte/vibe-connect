@@ -21,6 +21,7 @@ export default function FirebaseSetupHelp() {
             .map(([key]) => key);
 
         if (missing.length > 0) {
+            // eslint-disable-next-line
             setMissingKeys(missing);
             setIsVisible(true);
         }

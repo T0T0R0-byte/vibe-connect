@@ -35,36 +35,36 @@
 }
 
 :root {
-  /* Light Mode - Ultra Clean */
-  --background: hsl(220 33% 98%);
-  --foreground: hsl(224 71.4% 4.1%);
+  /* Electric Sky - Zero Grey Sanctuary */
+  --background: hsl(210 100% 98%);
+  --foreground: hsl(215 100% 12%);
   
-  --card: hsl(0 0% 100%);
-  --card-foreground: hsl(224 71.4% 4.1%);
+  --card: hsl(210 100% 100%);
+  --card-foreground: hsl(215 100% 12%);
  
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(224 71.4% 4.1%);
+  --popover: hsl(210 100% 100%);
+  --popover-foreground: hsl(215 100% 12%);
  
-  --primary: hsl(250 100% 63%); 
-  --primary-foreground: hsl(210 40% 98%);
+  --primary: hsl(220 100% 55%); /* Pure Electric Blue */
+  --primary-foreground: hsl(210 100% 98%);
  
-  --secondary: hsl(220 14.3% 95.9%);
-  --secondary-foreground: hsl(220.9 39.3% 11%);
+  --secondary: hsl(210 100% 94%); /* Sky Blue Tint */
+  --secondary-foreground: hsl(215 100% 20%);
  
-  --muted: hsl(220 14.3% 95.9%);
-  --muted-foreground: hsl(220 8.9% 46.1%);
+  --muted: hsl(210 100% 96%);
+  --muted-foreground: hsl(210 60% 45%); /* Purely blue-tinted muted text */
  
-  --accent: hsl(220 14.3% 95.9%);
-  --accent-foreground: hsl(220.9 39.3% 11%);
+  --accent: hsl(200 100% 92%);
+  --accent-foreground: hsl(215 100% 12%);
  
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: hsl(210 40% 98%);
+  --destructive: hsl(0 100% 60%);
+  --destructive-foreground: hsl(210 100% 98%);
  
-  --border: hsl(220 13% 91%);
-  --input: hsl(220 13% 91%);
-  --ring: hsl(250 100% 63%);
+  --border: hsl(210 100% 90%); /* Light Blue Border */
+  --input: hsl(210 100% 90%);
+  --ring: hsl(220 100% 55%);
  
-  --radius: 1.25rem;
+  --radius: 1.5rem;
 }
 
 html.dark {
@@ -99,34 +99,34 @@ html.dark {
 }
 
 html.cozy {
-  /* Cozy Mode - Wooden & Blanketry */
-  --background: hsl(32 45% 94%); /* Warm Oatmeal */
-  --foreground: hsl(24 35% 15%); /* Deep Espresso */
+  /* Modern Cabin - Warm Ivory Sanctuary */
+  --background: hsl(38 70% 96%); /* Pure Ivory */
+  --foreground: hsl(25 50% 15%); /* Roast Coffee */
   
-  --card: hsl(32 40% 97%); /* Soft Cream */
-  --card-foreground: hsl(24 35% 15%);
+  --card: hsl(38 60% 98%);
+  --card-foreground: hsl(25 50% 15%);
  
-  --popover: hsl(32 40% 97%);
-  --popover-foreground: hsl(24 35% 15%);
+  --popover: hsl(38 60% 98%);
+  --popover-foreground: hsl(25 50% 15%);
  
-  --primary: hsl(28 55% 40%); /* Rich Mahogany */
-  --primary-foreground: hsl(32 45% 98%);
+  --primary: hsl(25 75% 35%); /* Rich Saddle Leather */
+  --primary-foreground: hsl(38 70% 98%);
  
-  --secondary: hsl(32 30% 88%); /* Light Linen */
-  --secondary-foreground: hsl(24 35% 20%);
+  --secondary: hsl(38 40% 90%); /* Warm Sand */
+  --secondary-foreground: hsl(25 50% 20%);
  
-  --muted: hsl(32 30% 88%);
-  --muted-foreground: hsl(28 20% 45%);
+  --muted: hsl(38 40% 90%);
+  --muted-foreground: hsl(28 30% 45%);
  
-  --accent: hsl(38 65% 55%); /* Warm Amber Glow */
-  --accent-foreground: hsl(32 45% 98%);
+  --accent: hsl(45 90% 60%); /* Golden Sunset */
+  --accent-foreground: hsl(25 50% 15%);
  
-  --destructive: hsl(12 60% 45%);
-  --destructive-foreground: hsl(32 45% 98%);
+  --destructive: hsl(10 80% 45%);
+  --destructive-foreground: hsl(38 70% 98%);
  
-  --border: hsl(28 25% 82%); /* Soft Wood Grain */
-  --input: hsl(28 25% 85%);
-  --ring: hsl(28 55% 40% / 0.3);
+  --border: hsl(32 40% 88%); /* Warm Wood Grain */
+  --input: hsl(32 40% 90%);
+  --ring: hsl(25 75% 35% / 0.4);
 }
 
 html.light {
@@ -144,21 +144,19 @@ html.light {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground antialiased selection:bg-primary/20 transition-all duration-500 ease-in-out;
+    @apply bg-background text-foreground antialiased selection:bg-primary/20;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
   .cozy body {
-    background-image: 
-      radial-gradient(at 0% 0%, hsl(28 55% 40% / 0.03) 0, transparent 50%),
-      radial-gradient(at 100% 0%, hsl(38 65% 55% / 0.03) 0, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  .light body {
     background-attachment: fixed;
   }
 
   .dark body {
-    background-image:
-      radial-gradient(circle at 50% -20%, hsl(250 60% 40% / 0.08), transparent 60%),
-      radial-gradient(circle at 0% 50%, hsl(220 50% 30% / 0.05), transparent 50%);
     background-attachment: fixed;
   }
 }
@@ -187,13 +185,13 @@ html.light {
 
 /* Glassmorphism Styles */
 .glass {
-  @apply bg-white/40 dark:bg-black/40 backdrop-blur-2xl border border-white/20 dark:border-white/5;
+  @apply bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-white/20 dark:border-white/5;
 }
 
 .cozy .glass {
-  background-color: hsl(32 40% 97% / 0.4);
+  background-color: hsl(35 45% 98% / 0.4);
   backdrop-filter: blur(20px);
-  border-color: hsl(28 25% 82% / 0.5);
+  border-color: hsl(25 30% 85% / 0.5);
 }
 
 .glass-morphism {
@@ -201,8 +199,8 @@ html.light {
 }
 
 .cozy .glass-morphism {
-  background-color: hsl(32 40% 97% / 0.1);
-  border-color: hsl(28 25% 82% / 0.2);
+  background-color: hsl(35 45% 98% / 0.1);
+  border-color: hsl(25 30% 85% / 0.2);
 }
 
 .glass-nav {
@@ -210,8 +208,8 @@ html.light {
 }
 
 .cozy .glass-nav {
-  background-color: hsl(32 45% 94% / 0.6);
-  border-bottom-color: hsl(28 25% 82% / 0.3);
+  background-color: hsl(35 50% 96% / 0.6);
+  border-bottom-color: hsl(25 30% 85% / 0.3);
 }
 
 .glass-card {
@@ -219,14 +217,14 @@ html.light {
 }
 
 .cozy .glass-card {
-  background-color: hsl(32 40% 97% / 0.6);
-  border-color: hsl(28 25% 82% / 0.4);
+  background-color: hsl(38 60% 98% / 0.65);
+  border-color: hsl(32 40% 88% / 0.5);
 }
 
 .cozy .glass-card:hover {
-  background-color: hsl(32 40% 97% / 0.9);
+  background-color: hsl(38 60% 98% / 0.95);
   border-color: var(--primary);
-  box-shadow: 0 20px 40px -15px hsl(28 55% 40% / 0.1);
+  box-shadow: 0 20px 50px -15px hsl(25 75% 35% / 0.15);
 }
 
 /* Typography Gradient */
@@ -292,6 +290,7 @@ html.light {
 
 .animate-vibe-float {
   animation: float 6s ease-in-out infinite;
+  will-change: transform;
 }
 
 /* Dashboard Skeleton */

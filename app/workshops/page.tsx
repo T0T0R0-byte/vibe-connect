@@ -2,13 +2,14 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { db } from "@/firebase/firebaseConfig";
 import { collection, getDocs, query, where, doc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import Link from "next/link";
 import { useAuth } from "@/app/context/AuthContext";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { getAllWorkshops } from "@/firebase/workshopActions";
 
+// Types
 interface Workshop {
   id: string;
   title: string;
@@ -24,6 +25,7 @@ interface Workshop {
   rating?: number;
   ratingCount?: number;
   ratings?: Record<string, number>;
+  capacity?: number;
 }
 
 interface Vendor {
@@ -31,17 +33,61 @@ interface Vendor {
   displayName: string;
   businessName?: string;
   customOrdersEnabled?: boolean;
+  phoneNumber?: string;
+  socialLink?: string;
 }
 
 const CATEGORIES = ["All", "Art", "Music", "Technology", "Cooking", "Sports", "Business", "Health", "Other"];
 
+// --- Components ---
+
+const FeaturedHero = ({ workshop }: { workshop: Workshop | null }) => {
+  if (!workshop) return null;
+
+  return (
+    <div className="relative w-full h-[65vh] md:h-[75vh] rounded-[3.5rem] overflow-hidden mb-20 group shadow-3xl">
+      <img
+        src={workshop.imageUrl || "https://images.unsplash.com/photo-1513364776144-60967b0f800f?q=80&w=2071&auto=format&fit=crop"}
+        alt={workshop.title}
+        className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+      />
+      <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/40 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-60" />
+
+      <div className="absolute bottom-0 left-0 p-10 md:p-20 w-full md:w-3/4 flex flex-col items-start gap-6 z-10">
+        <div className="flex items-center gap-4 mb-2">
+          <span className="px-4 py-1.5 bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-[0.2em] rounded-full shadow-2xl shadow-primary/40">Exclusive Offering</span>
+          <span className="text-white/70 font-black text-xs uppercase tracking-[0.3em]">{workshop.category}</span>
+        </div>
+        <h1 className="text-5xl md:text-8xl font-black text-white leading-[0.85] tracking-tighter drop-shadow-2xl">{workshop.title}</h1>
+        <div className="flex items-center gap-2 text-amber-400 font-black text-lg">
+          <i className="fa-solid fa-star"></i>
+          <span>{workshop.rating ? workshop.rating.toFixed(1) : "Pioneering"}</span>
+        </div>
+        <p className="text-xl text-white/80 line-clamp-2 md:line-clamp-3 max-w-2xl font-medium leading-relaxed drop-shadow-md">{workshop.description}</p>
+
+        <div className="flex flex-wrap gap-5 mt-6">
+          <Link href={`/register/${workshop.id}`} className="px-12 py-5 bg-white text-black rounded-2xl font-black uppercase text-sm tracking-widest hover:bg-primary hover:text-white transition-all duration-500 flex items-center gap-3 shadow-xl">
+            <i className="fa-solid fa-bolt"></i> Register Now
+          </Link>
+          <button className="px-12 py-5 bg-white/10 backdrop-blur-2xl text-white border border-white/20 rounded-2xl font-black uppercase text-sm tracking-widest hover:bg-white/20 transition-all flex items-center gap-3">
+            <i className="fa-solid fa-circle-info"></i> Full Details
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function WorkshopsPage() {
   const { user, userData } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [vendors, setVendors] = useState<Record<string, Vendor>>({});
   const [loading, setLoading] = useState(true);
 
+  // Filter States
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activePriceRange, setActivePriceRange] = useState("All");
@@ -49,39 +95,63 @@ function WorkshopsPage() {
   const [activeDate, setActiveDate] = useState("");
   const [activeLocation, setActiveLocation] = useState("All");
   const [showCustomOnly, setShowCustomOnly] = useState(false);
-  const [localFavorites, setLocalFavorites] = useState<string[]>([]);
 
+  const [localFavorites, setLocalFavorites] = useState<string[]>([]);
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+
+  // Sync Search Params
+  useEffect(() => {
+    const category = searchParams?.get("category");
+    if (category && CATEGORIES.includes(category) && category !== activeCategory) {
+      setActiveCategory(category);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Sync Favorites
+  useEffect(() => {
+    if (userData?.favorites && JSON.stringify(userData.favorites) !== JSON.stringify(localFavorites)) {
+      setLocalFavorites(userData.favorites);
+    }
+  }, [userData?.favorites, localFavorites]);
+
+  // Fetch Data (Optimized)
   useEffect(() => {
     const fetchData = async () => {
-      const workshopSnap = await getDocs(collection(db, "workshops"));
-      const workshopList = workshopSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Workshop[];
-      setWorkshops(workshopList);
+      try {
+        setLoading(true);
+        const workshopList = await getAllWorkshops() as any as Workshop[];
+        setWorkshops(workshopList);
 
-      const vQuery = query(collection(db, "users"), where("role", "==", "vendor"));
-      const vSnap = await getDocs(vQuery);
-      const vList = vSnap.docs.reduce((acc, doc) => {
-        const data = doc.data();
-        acc[doc.id] = {
-          id: doc.id,
-          displayName: data.displayName,
-          businessName: data.businessName,
-          customOrdersEnabled: data.customOrdersEnabled
-        };
-        return acc;
-      }, {} as Record<string, Vendor>);
-
-      setVendors(vList);
-      setLoading(false);
+        const vQuery = query(collection(db, "users"), where("role", "==", "vendor"));
+        const vSnap = await getDocs(vQuery);
+        const vList = vSnap.docs.reduce((acc, doc) => {
+          const data = doc.data();
+          acc[doc.id] = {
+            id: doc.id,
+            displayName: data.displayName,
+            businessName: data.businessName,
+            customOrdersEnabled: data.customOrdersEnabled,
+            phoneNumber: data.phoneNumber,
+            socialLink: data.socialLink
+          };
+          return acc;
+        }, {} as Record<string, Vendor>);
+        setVendors(vList);
+      } catch (err) {
+        console.error("Failed to load data", err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (userData?.favorites) setLocalFavorites(userData.favorites);
-  }, [userData]);
-
   const toggleFavorite = async (wId: string) => {
-    if (!user) { alert("Login to save favorites"); return; }
+    if (!user) {
+      router.push("/login");
+      return;
+    }
     const isFav = localFavorites.includes(wId);
     setLocalFavorites(p => isFav ? p.filter(id => id !== wId) : [...p, wId]);
     try {
@@ -95,7 +165,7 @@ function WorkshopsPage() {
   const filtered = workshops.filter((w) => {
     const matchesSearch = w.title.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = activeCategory === "All" || w.category === activeCategory;
-    const matchesAge = activeAgeGroup === "All" || w.ageGroup === activeAgeGroup;
+    const matchesAge = activeAgeGroup === "All" || (w.ageGroup || "").includes(activeAgeGroup);
     const matchesLocation = activeLocation === "All" || w.location === activeLocation;
     const matchesDate = !activeDate || w.date === activeDate;
 
@@ -108,257 +178,249 @@ function WorkshopsPage() {
     const matchesCustom = !showCustomOnly || vendors[w.vendorId]?.customOrdersEnabled;
 
     return matchesSearch && matchesCategory && matchesAge && matchesPrice && matchesCustom && matchesDate && matchesLocation;
+  }).sort((a, b) => {
+    const ratingDiff = (b.rating || 0) - (a.rating || 0);
+    if (ratingDiff !== 0) return ratingDiff;
+    return (b.ratingCount || 0) - (a.ratingCount || 0);
   });
 
   const uniqueLocations = Array.from(new Set(workshops.map(w => w.location))).filter(Boolean);
+  const featuredWorkshop = workshops.length > 0 ? workshops[Math.floor(Math.random() * workshops.length)] : null;
 
   return (
-    <main className="min-h-screen pt-32 pb-24 px-6 relative overflow-hidden bg-background">
-      {/* Immersive Atmosphere */}
-      <div className="absolute top-0 right-1/4 w-[800px] h-[800px] bg-primary/5 blur-[150px] -z-10 rounded-full animate-vibe-float" />
-      <div className="absolute bottom-0 left-1/4 w-[600px] h-[600px] bg-indigo-500/5 blur-[120px] -z-10 rounded-full animate-vibe-float" style={{ animationDelay: '2s' }} />
+    <main className="min-h-screen pt-32 pb-32 px-6 relative overflow-hidden bg-transparent">
+      <div className="max-w-[1400px] mx-auto">
 
-      <div className="max-w-7xl mx-auto space-y-16">
-        <header className="text-center space-y-6 max-w-4xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="inline-flex items-center gap-2 px-6 py-2 rounded-full bg-primary/5 border border-primary/20 mb-4"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Find Your Class</span>
-          </motion.div>
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            Available <br />
-            <span className="text-gradient">Workshops.</span>
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-muted-foreground font-medium text-lg md:text-xl max-w-2xl mx-auto"
-          >
-            A complete directory of workshops designed to help you learn from the world's most innovative mentors.
-          </motion.p>
-        </header>
+        {/* SECTION 1: Category Quick Bar */}
+        <div className="flex items-center gap-4 overflow-x-auto pb-8 mb-12 scrollbar-hide no-scrollbar">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`px-8 py-4 rounded-2xl whitespace-nowrap text-xs font-black uppercase tracking-widest transition-all ${activeCategory === cat
+                ? "bg-primary text-primary-foreground shadow-2xl shadow-primary/40 scale-105"
+                : "glass border-white/5 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                }`}
+            >
+              <i className={`fa-solid ${cat === "All" ? "fa-border-all" :
+                cat === "Art" ? "fa-palette" :
+                  cat === "Music" ? "fa-music" :
+                    cat === "Technology" ? "fa-laptop-code" :
+                      "fa-vibe"
+                } mr-2`}></i>
+              {cat}
+            </button>
+          ))}
+        </div>
 
-        {/* Refined Filter Infrastructure */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
-          {/* Main Search & Reset Link */}
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="relative flex-1 group">
-              <i className="fa-solid fa-search absolute left-6 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors"></i>
-              <input
-                placeholder="Search by title, artist, or vibe..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-14 pr-8 py-4 bg-card border border-border rounded-xl outline-none font-bold text-sm focus:border-primary/40 focus:ring-4 focus:ring-primary/5 transition-all shadow-xl"
-              />
-            </div>
-
-            {(search || activeCategory !== 'All' || activePriceRange !== 'All' || activeAgeGroup !== 'All' || showCustomOnly || activeDate || activeLocation !== 'All') && (
-              <button
-                onClick={() => { setSearch(""); setActiveCategory("All"); setActivePriceRange("All"); setActiveAgeGroup("All"); setShowCustomOnly(false); setActiveDate(""); setActiveLocation("All"); }}
-                className="px-6 py-4 bg-secondary hover:bg-red-500/10 hover:text-red-500 text-muted-foreground rounded-xl text-xs font-bold uppercase tracking-widest transition-all border border-border/50 flex items-center gap-2 justify-center"
-              >
-                <i className="fa-solid fa-rotate-right"></i>
-                Reset
-              </button>
-            )}
+        {/* SECTION 2: Featured Hero */}
+        {!loading && featuredWorkshop && (
+          <div className="mb-20">
+            <FeaturedHero workshop={featuredWorkshop} />
           </div>
+        )}
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {/* Category Select */}
-            <div className="relative group">
-              <select
-                value={activeCategory}
-                onChange={(e) => setActiveCategory(e.target.value)}
-                className="w-full bg-card border border-border rounded-xl pl-4 pr-10 py-3 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary/40 text-foreground appearance-none cursor-pointer shadow-sm hover:border-primary/30"
-              >
-                {CATEGORIES.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-              <i className="fa-solid fa-layer-group absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none group-hover:text-primary transition-colors"></i>
+        {/* SECTION 3: Filter Island */}
+        <div className="glass-card !bg-background/20 p-10 mb-20 shadow-3xl backdrop-blur-[40px] border-white/10 ring-1 ring-white/5 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/20 blur-[60px] rounded-full -mr-16 -mt-16" />
+
+          <div className="flex flex-col xl:flex-row gap-8 items-end">
+            <div className="flex-1 w-full space-y-4">
+              <label className="text-[10px] font-black uppercase tracking-[0.3em] text-primary ml-2">Search Catalog</label>
+              <div className="relative group">
+                <i className="fa-solid fa-magnifying-glass absolute left-6 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors text-lg"></i>
+                <input
+                  placeholder="What are you looking to master today?"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-16 pr-8 py-6 bg-background/50 border border-white/10 rounded-[2rem] outline-none font-black text-lg focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all text-foreground placeholder:text-muted-foreground/30"
+                />
+              </div>
             </div>
 
-            {/* Date Input */}
-            <input
-              type="date"
-              value={activeDate}
-              onChange={(e) => setActiveDate(e.target.value)}
-              className="w-full bg-card border border-border rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary/40 text-foreground placeholder:text-muted-foreground shadow-sm hover:border-primary/30"
-            />
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4 w-full xl:w-auto">
+              {[
+                { label: "Category", val: activeCategory, set: setActiveCategory, icon: "fa-layer-group", options: CATEGORIES },
+                { label: "Location", val: activeLocation, set: setActiveLocation, icon: "fa-location-dot", options: ["All", ...uniqueLocations] },
+                { label: "Price", val: activePriceRange, set: setActivePriceRange, icon: "fa-tag", options: ["All Prices", "0-5000", "5000-15000", "15000+"] },
+                { label: "Ages", val: activeAgeGroup, set: setActiveAgeGroup, icon: "fa-users", options: ["All Ages", "Kids", "Teens", "Adults"] },
+              ].map((filter, i) => (
+                <div key={i} className="space-y-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">{filter.label}</span>
+                  <div className="relative group">
+                    <select
+                      value={filter.val === "All Prices" ? "All" : filter.val}
+                      onChange={(e) => filter.set(e.target.value)}
+                      className="w-full bg-background/50 border border-white/10 rounded-2xl pl-4 pr-10 py-4 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary text-foreground appearance-none cursor-pointer"
+                    >
+                      {filter.options.map(opt => (<option key={opt} value={opt} className="bg-background">{opt}</option>))}
+                    </select>
+                    <i className={`fa-solid ${filter.icon} absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none group-hover:text-primary transition-colors`}></i>
+                  </div>
+                </div>
+              ))}
 
-            {/* Location Select */}
-            <div className="relative group">
-              <select
-                value={activeLocation}
-                onChange={(e) => setActiveLocation(e.target.value)}
-                className="w-full bg-card border border-border rounded-xl pl-4 pr-10 py-3 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary/40 text-foreground appearance-none cursor-pointer shadow-sm hover:border-primary/30"
-              >
-                <option value="All">All Locations</option>
-                {uniqueLocations.map(loc => (
-                  <option key={loc} value={loc}>{loc}</option>
-                ))}
-              </select>
-              <i className="fa-solid fa-location-dot absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none group-hover:text-primary transition-colors"></i>
-            </div>
-
-            {/* Price Select */}
-            <div className="relative group">
-              <select
-                value={activePriceRange}
-                onChange={(e) => setActivePriceRange(e.target.value)}
-                className="w-full bg-card border border-border rounded-xl pl-4 pr-10 py-3 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary/40 text-foreground appearance-none cursor-pointer shadow-sm hover:border-primary/30"
-              >
-                <option value="All">All Prices</option>
-                <option value="0-5000">Under Rs. 5k</option>
-                <option value="5000-15000">Rs. 5k - 15k</option>
-                <option value="15000+">Premium (15k+)</option>
-              </select>
-              <i className="fa-solid fa-tag absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none group-hover:text-primary transition-colors"></i>
-            </div>
-
-            {/* Age Group Select */}
-            <div className="relative group">
-              <select
-                value={activeAgeGroup}
-                onChange={(e) => setActiveAgeGroup(e.target.value)}
-                className="w-full bg-card border border-border rounded-xl pl-4 pr-10 py-3 text-[10px] font-black uppercase tracking-widest outline-none transition-all focus:border-primary/40 text-foreground appearance-none cursor-pointer shadow-sm hover:border-primary/30"
-              >
-                <option value="All">All Ages</option>
-                <option value="Kids">Kids (0-12)</option>
-                <option value="Teens">Teens (13-19)</option>
-                <option value="Adults">Adults (20+)</option>
-                <option value="Seniors">Seniors (55+)</option>
-              </select>
-              <i className="fa-solid fa-users absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none group-hover:text-primary transition-colors"></i>
+              <div className="flex items-end">
+                <button
+                  disabled={!(search || activeCategory !== 'All' || activePriceRange !== 'All' || activeAgeGroup !== 'All' || showCustomOnly || activeDate || activeLocation !== 'All')}
+                  onClick={() => { setSearch(""); setActiveCategory("All"); setActivePriceRange("All"); setActiveAgeGroup("All"); setShowCustomOnly(false); setActiveDate(""); setActiveLocation("All"); }}
+                  className="w-full h-[58px] bg-destructive/10 text-destructive hover:bg-destructive hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-destructive/20 flex items-center gap-2 justify-center disabled:opacity-30 disabled:pointer-events-none"
+                >
+                  <i className="fa-solid fa-rotate-right"></i>
+                </button>
+              </div>
             </div>
           </div>
-        </motion.div>
+        </div>
 
+        {/* SECTION 4: Workshop Grid */}
         {loading ? (
-          <div className="grid md:grid-cols-3 gap-10">
-            {[1, 2, 3].map(n => <div key={n} className="h-[500px] skeleton rounded-[3rem]" />)}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-12">
+            {[1, 2, 3, 4, 5, 6].map(n => <div key={n} className="h-[550px] skeleton rounded-[3rem]" />)}
           </div>
         ) : (
-          <motion.div
-            layout
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10"
-          >
-            <AnimatePresence mode="popLayout">
-              {filtered.map((w, idx) => {
-                const isFav = localFavorites.includes(w.id);
-                return (
-                  <motion.div
-                    layout
-                    key={w.id}
-                    initial={{ opacity: 0, y: 40 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="glass-card !p-0 flex flex-col group relative overflow-hidden border-border hover:border-primary/30 transition-all duration-500 hover:shadow-2xl hover:-translate-y-1 bg-gradient-to-b from-card to-card/90"
-                  >
-                    <div className="h-72 relative overflow-hidden">
-                      <img src={w.imageBase64 || w.imageUrl || undefined} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" alt="" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
+            {filtered.map((w) => {
+              const isFav = localFavorites.includes(w.id);
+              return (
+                <div
+                  key={w.id}
+                  className="glass-card !p-0 flex flex-col group relative overflow-hidden border-white/5 hover:border-primary transition-all duration-500 hover:shadow-3xl hover:shadow-primary/10 hover:-translate-y-4 bg-background/40"
+                >
+                  {/* Category Border Glow */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                      <button
-                        onClick={() => toggleFavorite(w.id)}
-                        className={`absolute top-4 right-4 w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-all hover:scale-110 shadow-lg border z-10
-                           ${isFav ? 'bg-white/10 text-red-500 border-red-500/50 shadow-red-500/20' : 'bg-black/30 text-white border-white/20 hover:bg-black/50'}`}
-                      >
-                        <i className={`fa-${isFav ? 'solid' : 'regular'} fa-heart text-sm`}></i>
-                      </button>
+                  {/* Image Area */}
+                  <div className="h-72 relative overflow-hidden">
+                    <img
+                      src={w.imageBase64 || w.imageUrl || "https://images.unsplash.com/photo-1513364776144-60967b0f800f?q=80&w=2071&auto=format&fit=crop"}
+                      alt={w.title}
+                      className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
 
-                      <div className="absolute bottom-6 left-6">
-                        <span className="px-4 py-1.5 bg-primary/20 backdrop-blur-md rounded-xl text-[10px] font-black uppercase text-primary border border-primary/30 tracking-widest">{w.category}</span>
+                    {/* Action Hub */}
+                    <button
+                      onClick={() => toggleFavorite(w.id)}
+                      className={`absolute top-6 right-6 w-12 h-12 rounded-2xl backdrop-blur-3xl flex items-center justify-center transition-all z-10 border border-white/20 ${isFav ? 'bg-primary text-white scale-110 shadow-xl shadow-primary/40' : 'bg-black/30 text-white hover:bg-white hover:text-primary'
+                        }`}
+                    >
+                      <i className={`fa-${isFav ? 'solid' : 'regular'} fa-heart text-sm`}></i>
+                    </button>
+
+                    <div className="absolute bottom-6 left-6 flex items-center gap-3">
+                      <span className="px-4 py-1.5 bg-primary text-white rounded-full text-[9px] font-black uppercase tracking-[0.2em] shadow-xl">
+                        {w.category}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Content Area */}
+                  <div className="p-10 flex flex-col flex-1 relative z-10">
+                    <div className="flex flex-col gap-2 mb-8">
+                      <h3 className="text-2xl font-black text-foreground leading-tight line-clamp-2 group-hover:text-primary transition-colors tracking-tight uppercase">
+                        {w.title}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <div className="flex text-amber-500 text-[10px]">
+                          {[1, 2, 3, 4, 5].map(s => <i key={s} className="fa-solid fa-star"></i>)}
+                        </div>
+                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pt-0.5">
+                          {w.rating ? w.rating.toFixed(1) : "Early Access"}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="p-10 flex flex-col flex-1">
-                      <div className="flex justify-between items-start mb-6 gap-4">
-                        <h3 className="text-2xl font-black text-foreground group-hover:text-primary transition-colors leading-tight tracking-tight line-clamp-2">{w.title}</h3>
-                        <div className="flex items-center gap-2 text-[10px] font-black text-amber-500 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20 shadow-sm">
-                          <i className="fa-solid fa-star text-[8px]"></i> {w.rating?.toFixed(1) || "NEW"}
-                        </div>
+                    <div className="flex items-center gap-4 mb-8 p-4 bg-primary/5 rounded-2xl border border-primary/10">
+                      <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center text-xs font-black shadow-lg shadow-primary/30">
+                        {vendors[w.vendorId]?.businessName?.[0] || 'V'}
                       </div>
-
-                      <div className="flex items-center gap-3 mb-8 text-muted-foreground font-black text-[10px] uppercase tracking-widest">
-                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center text-white text-[10px] shadow-lg shadow-primary/10">
-                          {vendors[w.vendorId]?.businessName?.[0] || vendors[w.vendorId]?.displayName?.[0] || 'V'}
-                        </div>
-                        <span className="group-hover:text-foreground transition-colors">By {vendors[w.vendorId]?.businessName || vendors[w.vendorId]?.displayName || "Collective Artist"}</span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 mb-10">
-                        <div className="flex items-center gap-3 text-muted-foreground p-3 bg-secondary/30 rounded-2xl border border-border/50">
-                          <i className="fa-solid fa-calendar text-primary text-sm"></i>
-                          <span className="text-[10px] font-black uppercase tracking-tighter">{new Date(w.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-muted-foreground p-3 bg-secondary/30 rounded-2xl border border-border/50">
-                          <i className="fa-solid fa-location-dot text-primary text-sm"></i>
-                          <span className="text-[10px] font-black uppercase tracking-tighter truncate">{w.location}</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-auto flex items-center justify-between pt-8 border-t border-border/50">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] mb-1">Access Pass</span>
-                          <span className="text-3xl font-black text-foreground">Rs. {w.price.toLocaleString()}</span>
-                        </div>
-                        {userData?.registeredWorkshops?.includes(w.id) ? (
-                          <div className="grid grid-cols-2 gap-3">
-                            <Link
-                              href="/profile"
-                              className="px-2 py-3 bg-secondary text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-secondary/80 transition-all flex items-center justify-center gap-2"
-                            >
-                              <i className="fa-solid fa-check-circle"></i> Joined
-                            </Link>
-                            <Link
-                              href={`/profile?reviewId=${w.id}`}
-                              className="px-2 py-3 bg-white/5 text-muted-foreground border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-2"
-                            >
-                              <i className="fa-solid fa-star text-amber-500"></i> Rate
-                            </Link>
-                          </div>
-                        ) : (
-                          <Link
-                            href={`/register/${w.id}`}
-                            className="btn-vibe-primary !py-4 !px-10 text-[10px]"
-                          >
-                            Join Experience
-                          </Link>
-                        )}
+                      <div className="flex flex-col">
+                        <span className="text-[9px] font-black text-primary uppercase tracking-[0.2em]">Instructor</span>
+                        <span className="text-xs text-foreground font-black tracking-tight uppercase truncate max-w-[150px]">
+                          {vendors[w.vendorId]?.businessName || vendors[w.vendorId]?.displayName || "Vibe Artist"}
+                        </span>
                       </div>
                     </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
+
+                    <div className="flex flex-wrap gap-2 text-[10px] font-black text-muted-foreground mb-10">
+                      <div className="flex items-center gap-2 px-4 py-2 bg-secondary/30 rounded-full border border-white/5">
+                        <i className="fa-solid fa-user-group text-primary"></i>
+                        <span className="uppercase tracking-widest">{w.ageGroup || "All Ages"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 px-4 py-2 bg-secondary/30 rounded-full border border-white/5">
+                        <i className="fa-solid fa-marker text-primary"></i>
+                        <span className="uppercase tracking-widest">{w.location || "On-Vibe"}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto pt-8 border-t border-white/5 flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase text-primary font-black tracking-[0.3em] mb-1">Standard Entry</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-xs font-black text-foreground">Rs.</span>
+                          <span className="text-3xl font-black text-foreground tracking-tighter">{w.price || 0}</span>
+                        </div>
+                      </div>
+
+                      {userData?.registeredWorkshops?.includes(w.id) ? (
+                        <div className="px-8 py-4 rounded-2xl bg-green-500 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-green-500/20">
+                          Joined ✓
+                        </div>
+                      ) : (
+                        <Link href={`/register/${w.id}`} className="btn-vibe-primary px-10 py-5 !rounded-2xl !text-[10px] shadow-2xl shadow-primary/30">
+                          Secure Spot
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
 
             {filtered.length === 0 && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="col-span-full py-20 text-center glass-card border-dashed">
-                <i className="fa-solid fa-folder-open text-4xl text-muted-foreground/30 mb-6"></i>
-                <h3 className="text-2xl font-black text-foreground mb-2">No workshops found</h3>
-                <p className="text-muted-foreground text-sm font-bold uppercase tracking-widest mb-8">Try adjusting your filters</p>
+              <div className="col-span-full py-40 text-center glass-card !bg-background/20 border-dashed border-2 border-primary/20 rounded-[4rem]">
+                <div className="w-32 h-32 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-10 animate-vibe-float">
+                  <i className="fa-solid fa-binoculars text-6xl text-primary/40"></i>
+                </div>
+                <h3 className="text-5xl font-black text-foreground mb-6">Uncharted Territory</h3>
+                <p className="text-muted-foreground text-sm font-black uppercase tracking-[0.4em] mb-12 max-w-md mx-auto leading-relaxed">We couldn't find any vibes matching those specific filters. Reach for something new?</p>
                 <button
                   onClick={() => { setSearch(""); setActiveCategory("All"); setActivePriceRange("All"); setActiveAgeGroup("All"); setShowCustomOnly(false); }}
-                  className="btn-vibe-secondary"
+                  className="btn-vibe-primary px-16 py-6"
                 >
-                  Reset Filters
+                  Reset Universe
                 </button>
-              </motion.div>
+              </div>
             )}
-          </motion.div>
+          </div>
+        )}
+
+        {/* Custom Request Modal */}
+        {selectedVendor && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div
+              onClick={() => setSelectedVendor(null)}
+              className="absolute inset-0 bg-black/95 backdrop-blur-[20px]"
+            />
+            <div
+              className="relative w-full max-w-lg bg-card border border-white/10 rounded-[3rem] overflow-hidden shadow-3xl p-12 text-center"
+            >
+              <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-8">
+                <i className="fa-solid fa-wand-magic-sparkles text-4xl text-primary"></i>
+              </div>
+              <h2 className="text-4xl font-black text-foreground mb-4 uppercase tracking-tighter">{selectedVendor.businessName}</h2>
+              <p className="text-muted-foreground font-black text-xs uppercase tracking-widest mb-10">This master artist accepts custom vibe requests.</p>
+
+              <div className="p-8 bg-secondary/50 rounded-3xl border border-white/5 mb-10">
+                <p className="text-foreground font-medium leading-relaxed italic">"Let's create something unique that fits your specific vision and Mastery path."</p>
+              </div>
+
+              <button onClick={() => setSelectedVendor(null)} className="btn-vibe-primary w-full py-6">
+                Connect with Master
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </main>

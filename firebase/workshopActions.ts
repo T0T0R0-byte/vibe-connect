@@ -3,6 +3,7 @@ import {
   collection,
   addDoc,
   doc,
+  getDoc,
   updateDoc,
   deleteDoc,
   getDocs,
@@ -12,14 +13,15 @@ import {
   arrayUnion,
   setDoc,
   increment,
+  arrayRemove,
 } from "firebase/firestore";
 
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, StorageReference } from "firebase/storage";
 
 interface WorkshopData {
   title: string;
   description: string;
-  price: number;
+
   date: string;
   category: string;
   image?: File | null;
@@ -29,7 +31,7 @@ interface WorkshopData {
   capacity?: number;
   ageGroup?: string;
   consentRequired?: boolean;
-  refundPolicy?: string; // Missing field
+  price?: number;
 }
 
 // CREATE WORKSHOP
@@ -38,11 +40,11 @@ export const createWorkshop = async (vendorId: string, data: WorkshopData) => {
   let imageBase64 = "";
   let imageUrls: string[] = []; // Store multiple URLs
 
-  console.log("createWorkshop: Starting creation for", data.title);
+
 
   // 1. Handle Multiple Images (Priority)
   if (data.images && data.images.length > 0) {
-    console.log(`createWorkshop: Processing ${data.images.length} images...`);
+
 
     const uploadPromises = data.images.map(async (file, index) => {
       try {
@@ -65,7 +67,7 @@ export const createWorkshop = async (vendorId: string, data: WorkshopData) => {
   }
   // 2. Fallback to single image logic if no array provided
   else if (data.image) {
-    console.log("createWorkshop: Processing single image...", data.image.name);
+
 
     if (data.image.size < 700 * 1024) {
       try {
@@ -92,7 +94,7 @@ export const createWorkshop = async (vendorId: string, data: WorkshopData) => {
     vendorId,
     title: data.title,
     description: data.description,
-    price: data.price,
+
     category: data.category,
     date: data.date,
     whatsappLink: data.whatsappLink || "",
@@ -100,12 +102,14 @@ export const createWorkshop = async (vendorId: string, data: WorkshopData) => {
     capacity: data.capacity || 0,
     ageGroup: data.ageGroup || "All Ages",
     consentRequired: data.consentRequired || false,
+    price: data.price || 0,
+
     imageUrl, // Main image
     imageUrls, // All images (up to 3)
     imageBase64,
     createdAt: serverTimestamp(),
   });
-  console.log("createWorkshop: Document created.");
+
 };
 
 // GET ALL WORKSHOPS FOR A VENDOR
@@ -115,12 +119,21 @@ export const getVendorWorkshops = async (vendorId: string) => {
   return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 };
 
+// GET ALL WORKSHOPS (For Homepage)
+export const getAllWorkshops = async () => {
+  const q = query(collection(db, "workshops"));
+  const querySnapshot = await getDocs(q);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as any));
+};
+
 // UPDATE WORKSHOP
 export const updateWorkshop = async (workshopId: string, data: Partial<WorkshopData>) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateData: any = {
     title: data.title,
     description: data.description,
-    price: data.price,
+
     category: data.category,
     date: data.date,
     whatsappLink: data.whatsappLink,
@@ -128,6 +141,8 @@ export const updateWorkshop = async (workshopId: string, data: Partial<WorkshopD
     capacity: data.capacity,
     ageGroup: data.ageGroup,
     consentRequired: data.consentRequired,
+    price: data.price,
+
   };
 
   // Handle Image Updates
@@ -152,7 +167,7 @@ export const updateWorkshop = async (workshopId: string, data: Partial<WorkshopD
   Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
 
   await updateDoc(doc(db, "workshops", workshopId), updateData);
-  console.log("updateWorkshop: Workshop updated.");
+
 };
 
 // DELETE WORKSHOP
@@ -171,102 +186,156 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+// Helper for robust upload (5s timeout)
+const uploadWithTimeout = async (fileRef: StorageReference, file: File): Promise<string> => {
+  try {
+    const uploadTask = uploadBytes(fileRef, file);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Upload timed out")), 5000)
+    );
+
+    await Promise.race([uploadTask, timeoutPromise]);
+    return await getDownloadURL(fileRef);
+  } catch (e) {
+    console.warn("Upload failed or timed out, skipping file url.", e);
+    return "";
+  }
+};
+
 // REGISTER FOR WORKSHOP (Bulk)
 export const registerForWorkshop = async (
   workshopId: string,
   userId: string,
-  receiptFile: File | null,
+  paymentIntentId: string | null,
   participants: {
     fullName: string;
     age: string;
     phone: string;
     address: string;
-    consentFile?: File | null; // Allow file
+    consentFile?: File | null;
   }[]
 ) => {
-  console.log("registerForWorkshop: Starting bulk registration...");
-  let receiptUrl = "";
-  let receiptBase64 = "";
 
-  // Upload Receipt (Once for the whole batch)
-  if (receiptFile) {
-    console.log("registerForWorkshop: Processing receipt...", receiptFile.name);
 
-    if (receiptFile.size < 700 * 1024) {
-      try {
-        receiptBase64 = await fileToBase64(receiptFile);
-      } catch (err) {
-        console.error("registerForWorkshop: Base64 conversion failed:", err);
-      }
-    }
-
-    if (!receiptBase64) {
-      try {
-        const sanitizedName = receiptFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
-        const receiptRef = ref(
-          storage,
-          `receipts/${workshopId}/${userId}-${Date.now()}-${sanitizedName}`
-        );
-        await uploadBytes(receiptRef, receiptFile);
-        receiptUrl = await getDownloadURL(receiptRef);
-      } catch (storageErr) {
-        console.error("registerForWorkshop: Storage upload failed:", storageErr);
-        throw new Error("Failed to upload receipt. Please check your connection.");
-      }
-    }
-  }
-
-  // Create a unique Group ID for this batch
   const groupId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-  // Create Registration Documents (One per participant)
   const batchPromises = participants.map(async (participant) => {
     let consentUrl = "";
 
-    // Upload Consent File if present
     if (participant.consentFile) {
-      try {
-        const fName = participant.consentFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
-        const consentRef = ref(storage, `consents/${workshopId}/${userId}-${Date.now()}-${fName}`);
-        await uploadBytes(consentRef, participant.consentFile);
-        consentUrl = await getDownloadURL(consentRef);
-      } catch (e) {
-        console.error("Failed to upload consent", e);
-        // Proceed without it? Or fail? Let's proceed but log it.
-      }
+      const fName = participant.consentFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
+      const consentRef = ref(storage, `consents/${workshopId}/${userId}-${Date.now()}-${fName}`);
+      consentUrl = await uploadWithTimeout(consentRef, participant.consentFile);
     }
 
-    // Prepare participant data without the File object (Firestore can't store File)
     const { consentFile, ...detailsToStore } = participant;
 
     await addDoc(collection(db, "registrations"), {
       workshopId,
       userId,
       groupId,
-      receiptUrl,
-      receiptBase64,
-      status: "pending",
+      paymentIntentId,
+      status: "confirmed",
       createdAt: serverTimestamp(),
       consentAccepted: true,
       participantDetails: detailsToStore,
-      consentUrl, // Save URL
+      consentUrl,
     });
   });
 
   await Promise.all(batchPromises);
-  console.log(`registerForWorkshop: Created ${participants.length} registration docs.`);
 
-  // Update User's Registered Workshops
   const userRef = doc(db, "users", userId);
   await setDoc(userRef, {
     registeredWorkshops: arrayUnion(workshopId),
   }, { merge: true });
 
-  // Decrement Workshop Capacity
   const workshopRef = doc(db, "workshops", workshopId);
   await updateDoc(workshopRef, {
     capacity: increment(-participants.length)
   });
 
-  console.log("registerForWorkshop: Complete.");
+
 };
+
+// REQUEST REFUND (User Action)
+export const requestRefund = async (registrationId: string, reason: string) => {
+  const regRef = doc(db, "registrations", registrationId);
+  const refundId = `REF-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+
+  await updateDoc(regRef, {
+    status: "refund_requested",
+    refundReason: reason,
+    refundId: refundId,
+    requestedAt: serverTimestamp()
+  });
+  return { success: true };
+};
+
+// PROCESS REFUND (Vendor/Admin Action - Triggers Stripe)
+export const processRefund = async (registrationId: string) => {
+  const regRef = doc(db, "registrations", registrationId);
+  const regSnap = await getDoc(regRef);
+
+  if (!regSnap.exists()) throw new Error("Registration not found");
+
+  const data = regSnap.data();
+  if (data.status === "refunded") throw new Error("Already refunded");
+
+  // 1. If paid, trigger Stripe Refund API
+  if (data.paymentIntentId) {
+    const res = await fetch("/api/refund", {
+      method: "POST",
+      body: JSON.stringify({ paymentIntentId: data.paymentIntentId }),
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.details || "Refund failed");
+    }
+  }
+
+  // 2. Update Registration Status
+  await updateDoc(regRef, { status: "refunded", refundedAt: serverTimestamp() });
+
+  // 3. Restore Capacity
+  const workshopRef = doc(db, "workshops", data.workshopId);
+  await updateDoc(workshopRef, {
+    capacity: increment(1)
+  });
+
+  // 4. Cleanup User Profile (Allow Re-joining)
+  // Check if user has other ACTIVE registrations for this workshop
+  const q = query(
+    collection(db, "registrations"),
+    where("userId", "==", data.userId),
+    where("workshopId", "==", data.workshopId)
+  );
+
+  const snapshot = await getDocs(q);
+  const hasOtherActive = snapshot.docs.some(doc => {
+    // Exclude the one we just refunded (it is now 'refunded' in DB, but let's be safe)
+    if (doc.id === registrationId) return false;
+    const status = doc.data().status;
+    return ['confirmed', 'pending', 'refund_requested', 'refund_rejected'].includes(status);
+  });
+
+  if (!hasOtherActive) {
+    const userRef = doc(db, "users", data.userId);
+    await updateDoc(userRef, {
+      registeredWorkshops: arrayRemove(data.workshopId) // allow user to see "Register" button again
+    });
+  }
+
+  return { success: true };
+};
+
+// REJECT REFUND (Vendor Action)
+export const rejectRefund = async (registrationId: string, reason: string) => {
+  const regRef = doc(db, "registrations", registrationId);
+  await updateDoc(regRef, {
+    status: "refund_rejected",
+    rejectionReason: reason,
+    rejectedAt: serverTimestamp()
+  });
+};
+
