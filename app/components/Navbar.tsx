@@ -35,6 +35,7 @@ export default function Navbar() {
     const navItems = [
         { name: "Home", path: "/" },
         { name: "Workshops", path: "/workshops" },
+        { name: "Guide", path: "/faq" },
     ];
 
     return (
@@ -85,48 +86,62 @@ export default function Navbar() {
                         <div className="w-10 h-10 bg-white/5 rounded-full animate-pulse"></div>
                     ) : user ? (
                         <div className="relative group">
-                            <button className="flex items-center gap-3 pl-3 pr-1 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all group-hover:border-primary/20">
-                                <span className="text-[10px] font-black uppercase tracking-widest leading-none truncate max-w-[100px]">{userData?.displayName || "Account"}</span>
-                                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-indigo-500 p-[2px]">
-                                    <div className="w-full h-full rounded-[0.6rem] bg-background overflow-hidden relative">
-                                        {userData?.photoURL ? (
-                                            <img src={userData.photoURL} alt="Profile" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center bg-primary/20 text-white font-black text-xs uppercase tracking-tighter">
-                                                {userData?.displayName?.[0] || "?"}
-                                            </div>
-                                        )}
+                            <button className="flex items-center gap-2 pl-4 pr-2 py-1.5 bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 rounded-full transition-all group-hover:border-primary/30 group-hover:bg-white/[0.08]">
+                                <span className="text-[10px] font-black uppercase tracking-widest leading-none truncate max-w-[100px] text-foreground/90">{userData?.displayName || "Account"}</span>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary via-indigo-500 to-purple-500 p-[1px] shadow-lg shadow-primary/10">
+                                        <div className="w-full h-full rounded-full bg-primary/10 flex items-center justify-center text-primary font-black text-[10px] uppercase tracking-tighter relative overflow-hidden">
+                                            <span>{userData?.displayName?.[0] || "?"}</span>
+                                            {userData?.photoURL && (
+                                                <img
+                                                    src={userData.photoURL}
+                                                    alt="Profile"
+                                                    className="absolute inset-0 w-full h-full object-cover"
+                                                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                                                />
+                                            )}
+                                        </div>
                                     </div>
+                                    <i className="fa-solid fa-chevron-down text-[8px] text-muted-foreground group-hover:text-primary transition-colors mr-1"></i>
                                 </div>
                             </button>
 
                             {/* Dropdown */}
-                            <div className="absolute right-0 top-full mt-4 w-60 glass-card !p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 transform origin-top-right translate-y-2 group-hover:translate-y-0 shadow-3xl">
-                                <div className="px-4 py-3 border-b border-white/5 mb-2">
-                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Logged in as</p>
-                                    <p className="text-[11px] font-bold text-foreground truncate">{user.email}</p>
+                            <div className="absolute right-0 top-full mt-3 w-64 glass-card-premium !p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-500 transform origin-top-right translate-y-4 group-hover:translate-y-0 shadow-[0_20px_50px_rgba(0,0,0,0.5)] border-white/10">
+                                <div className="px-4 py-4 border-b border-white/5 mb-2 bg-white/[0.02] rounded-t-2xl">
+                                    <p className="text-[8px] font-black text-primary uppercase tracking-[0.3em] mb-1">Authenticated Account</p>
+                                    <p className="text-xs font-bold text-foreground truncate">{user.email}</p>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <span className="px-2 py-0.5 bg-primary/10 text-primary text-[8px] font-black uppercase rounded-md border border-primary/20 tracking-tighter">
+                                            {userData?.role || "Participant"}
+                                        </span>
+                                    </div>
                                 </div>
-                                <Link href="/profile" className="flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white/5 transition-colors">
-                                    <i className="fa-regular fa-user text-primary"></i> Profile
-                                </Link>
-                                {userData?.role === "vendor" && (
-                                    <Link href="/vendor" className="flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white/5 transition-colors">
-                                        <i className="fa-solid fa-store text-indigo-400"></i> Vendor Dashboard
+                                <div className="space-y-1">
+                                    <Link href="/profile" className="flex items-center justify-between px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white/5 transition-all hover:translate-x-1 group/item">
+                                        <span className="flex items-center gap-3"><i className="fa-solid fa-id-card text-primary/70 group-hover/item:text-primary"></i> My Profile</span>
+                                        <i className="fa-solid fa-arrow-right text-[8px] opacity-0 group-hover/item:opacity-100 transition-all"></i>
                                     </Link>
-                                )}
-                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                {(userData?.email === "admin@vibe.com" || (userData as any)?.role === 'admin') && (
-                                    <Link href="/admin" className="flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white/5 transition-colors text-red-400">
-                                        <i className="fa-solid fa-shield-halved"></i> Admin Dashboard
-                                    </Link>
-                                )}
-                                <div className="h-px bg-white/5 my-2"></div>
-                                <button
-                                    onClick={logout}
-                                    className="w-full flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-red-500 rounded-xl hover:bg-red-500/10 transition-colors"
-                                >
-                                    <i className="fa-solid fa-right-from-bracket"></i> Log Out
-                                </button>
+                                    {userData?.role === "vendor" && (
+                                        <Link href="/vendor" className="flex items-center justify-between px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white/5 transition-all hover:translate-x-1 group/item">
+                                            <span className="flex items-center gap-3"><i className="fa-solid fa-chart-line text-indigo-400 group-hover/item:text-indigo-300"></i> Vendor Dashboard</span>
+                                            <i className="fa-solid fa-arrow-right text-[8px] opacity-0 group-hover/item:opacity-100 transition-all"></i>
+                                        </Link>
+                                    )}
+                                    {(userData?.email === "admin@vibe.com" || (userData as any)?.role === 'admin') && (
+                                        <Link href="/admin" className="flex items-center justify-between px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-500/5 transition-all hover:translate-x-1 group/item text-red-400">
+                                            <span className="flex items-center gap-3"><i className="fa-solid fa-shield-halved"></i> Control Center</span>
+                                            <i className="fa-solid fa-arrow-right text-[8px] opacity-0 group-hover/item:opacity-100 transition-all"></i>
+                                        </Link>
+                                    )}
+                                    <div className="h-px bg-white/5 my-2 mx-2"></div>
+                                    <button
+                                        onClick={logout}
+                                        className="w-full flex items-center justify-between px-4 py-3 text-[10px] font-black uppercase tracking-widest text-red-500/80 rounded-xl hover:bg-red-500/10 transition-all hover:px-5"
+                                    >
+                                        <span className="flex items-center gap-3"><i className="fa-solid fa-power-off text-sm"></i> Sign Out</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ) : (
@@ -173,15 +188,54 @@ export default function Navbar() {
                             ))}
                             <div className="h-px bg-white/5 my-2"></div>
                             {user ? (
-                                <>
-                                    <Link href="/profile" onClick={() => setIsMenuOpen(false)} className="px-5 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-foreground hover:bg-white/5">Profile</Link>
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-4 px-5 py-6 mb-2 bg-white/5 rounded-2xl border border-white/5">
+                                        <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-primary to-indigo-500 p-[2px] shadow-lg shadow-primary/10 shrink-0">
+                                            <div className="w-full h-full rounded-full bg-primary/10 flex items-center justify-center text-primary font-black text-lg uppercase relative overflow-hidden">
+                                                <span>{userData?.displayName?.[0] || "?"}</span>
+                                                {userData?.photoURL && (
+                                                    <img
+                                                        src={userData.photoURL}
+                                                        alt="Profile"
+                                                        className="absolute inset-0 w-full h-full object-cover"
+                                                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                                                    />
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="overflow-hidden">
+                                            <p className="text-base font-black text-white leading-tight truncate">{userData?.displayName || "Member"}</p>
+                                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider truncate mb-1">{user.email}</p>
+                                            <span className="px-2 py-0.5 bg-primary/10 text-primary text-[8px] font-black uppercase rounded-md border border-primary/20 tracking-tighter">
+                                                {userData?.role || "Participant"}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <Link
+                                        href="/profile"
+                                        onClick={() => setIsMenuOpen(false)}
+                                        className="px-5 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-foreground hover:bg-white/5 flex items-center gap-3"
+                                    >
+                                        <i className="fa-solid fa-id-card text-primary text-sm w-5"></i> My Profile
+                                    </Link>
                                     {userData?.role === "vendor" && (
-                                        <Link href="/vendor" onClick={() => setIsMenuOpen(false)} className="px-5 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:bg-white/5">Vendor Dashboard</Link>
+                                        <Link
+                                            href="/vendor"
+                                            onClick={() => setIsMenuOpen(false)}
+                                            className="px-5 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:bg-white/5 flex items-center gap-3"
+                                        >
+                                            <i className="fa-solid fa-chart-line text-sm w-5"></i> Vendor Dashboard
+                                        </Link>
                                     )}
-                                    <button onClick={() => { logout(); setIsMenuOpen(false); }} className="px-5 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 text-left hover:bg-red-500/5 transition-all">Log Out</button>
-                                </>
+                                    <button
+                                        onClick={() => { logout(); setIsMenuOpen(false); }}
+                                        className="px-5 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 text-left hover:bg-red-500/5 transition-all flex items-center gap-3"
+                                    >
+                                        <i className="fa-solid fa-power-off text-sm w-5"></i> Sign Out
+                                    </button>
+                                </div>
                             ) : (
-                                <Link href="/login" onClick={() => setIsMenuOpen(false)} className="btn-vibe-primary text-center !py-4">Log In</Link>
+                                <Link href="/login" onClick={() => setIsMenuOpen(false)} className="btn-vibe-primary text-center !py-4 shadow-xl shadow-primary/20">Log In</Link>
                             )}
                         </div>
                     </motion.div>

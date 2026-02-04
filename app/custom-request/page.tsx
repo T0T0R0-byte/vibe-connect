@@ -21,6 +21,7 @@ function CustomRequestContent() {
 
     const [topic, setTopic] = useState("");
     const [budget, setBudget] = useState("");
+    const [phone, setPhone] = useState(userData?.phoneNumber || "");
     const [attendees, setAttendees] = useState("");
     const [pdfFile, setPdfFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
@@ -34,7 +35,10 @@ function CustomRequestContent() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!pdfFile || !topic || !budget) return;
+        if (!pdfFile || !topic || !budget || !phone) {
+            alert("Please fill all required fields including contact phone.");
+            return;
+        }
 
         setUploading(true);
         try {
@@ -48,6 +52,7 @@ function CustomRequestContent() {
                 userId: user.uid,
                 userName: userData?.displayName || "Anonymous",
                 userEmail: user.email,
+                userPhone: phone,
                 vendorId: vendorId || "all", // "all" implies open request if no vendor selected
                 topic,
                 budget,
@@ -144,9 +149,21 @@ function CustomRequestContent() {
                     </div>
                 ) : (
                     <>
-                        <div className="text-center mb-10">
+                        <div className="text-center mb-10 relative">
+                            <button
+                                type="button"
+                                onClick={() => router.back()}
+                                className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all text-muted-foreground border border-white/5"
+                                title="Go Back"
+                            >
+                                <i className="fa-solid fa-arrow-left"></i>
+                            </button>
                             <h1 className="text-3xl md:text-4xl font-black text-foreground uppercase tracking-tighter mb-2">Custom Workshop</h1>
-                            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Design your perfect learning experience</p>
+                            {vendorNameParam ? (
+                                <p className="text-xs font-black text-primary uppercase tracking-[0.2em]">Requesting from: <span className="text-foreground">{decodeURIComponent(vendorNameParam)}</span></p>
+                            ) : (
+                                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Design your perfect learning experience</p>
+                            )}
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-8">
@@ -172,6 +189,18 @@ function CustomRequestContent() {
                                         type="number"
                                     />
                                 </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] ml-1">Contact Phone</label>
+                                <input
+                                    value={phone}
+                                    onChange={e => setPhone(e.target.value)}
+                                    className="w-full px-5 py-4 bg-secondary/30 border border-white/5 rounded-2xl text-sm font-bold text-foreground focus:border-primary/50 outline-none transition-all placeholder:text-muted-foreground/20"
+                                    placeholder="+94 77 123 4567"
+                                    required
+                                    type="tel"
+                                />
                             </div>
 
                             <div className="space-y-4">

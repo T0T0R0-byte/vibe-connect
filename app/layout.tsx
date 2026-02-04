@@ -6,6 +6,7 @@ import { AuthProvider } from "./context/AuthContext";
 import FirebaseSetupHelp from "./components/FirebaseSetupHelp";
 import { Providers } from "./providers";
 import type { Metadata } from "next";
+import SmoothScroll from "./components/SmoothScroll"; // Import SmoothScroll
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -30,24 +31,24 @@ export default function RootLayout({
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" crossOrigin="anonymous" referrerPolicy="no-referrer" />
       </head>
       <body className={`${outfit.variable} relative min-h-screen overflow-x-hidden bg-background text-foreground antialiased font-sans`}>
-        <Providers attribute="class" defaultTheme="dark" themes={["light", "dark", "cozy"]} enableSystem disableTransitionOnChange>
+        <Providers attribute="class" defaultTheme="dark" themes={["light", "dark", "cozy"]} enableSystem disableTransitionOnChange={true}>
           <AuthProvider>
+            <SmoothScroll /> {/* Add SmoothScroll here */}
             <FirebaseSetupHelp />
             <Navbar />
             <main className="relative z-10 pt-24 min-h-screen flex flex-col">{children}</main>
 
-            {/* Premium Immersive Background - Dynamic & Floating */}
+            {/* Premium Immersive Background - Optimized */}
             <div className="fixed inset-0 -z-50 pointer-events-none overflow-hidden">
               {/* Base Mesh */}
               <div className="absolute inset-0 bg-background"></div>
 
-              {/* Animated Atmosphere */}
-              <div className="absolute top-[-20%] left-[-10%] w-[1000px] h-[1000px] bg-primary/15 rounded-full blur-[140px] animate-vibe-float"></div>
-              <div className="absolute bottom-[-20%] right-[-10%] w-[1200px] h-[1200px] bg-indigo-500/10 rounded-full blur-[160px] animate-vibe-float opacity-80" style={{ animationDelay: '2s' }}></div>
-              <div className="absolute top-[20%] right-[-5%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] animate-vibe-float opacity-60" style={{ animationDelay: '4s' }}></div>
+              {/* Simplified Animated Atmosphere - Reduced blur for performance */}
+              <div className="absolute top-[-20%] left-[-10%] w-[1000px] h-[1000px] bg-primary/10 rounded-full blur-[80px] animate-vibe-float"></div>
+              <div className="absolute bottom-[-20%] right-[-10%] w-[1200px] h-[1200px] bg-indigo-500/8 rounded-full blur-[100px] opacity-80"></div>
 
-              {/* Noise Overlay */}
-              <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
+              {/* Noise Overlay - Reduced opacity */}
+              <div className="absolute inset-0 opacity-[0.01] dark:opacity-[0.02] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
             </div>
           </AuthProvider>
         </Providers>

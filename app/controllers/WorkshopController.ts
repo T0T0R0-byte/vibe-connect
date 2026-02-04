@@ -55,7 +55,8 @@ export class WorkshopController {
             imageUrls: imageUrls.length > 0 ? imageUrls : (data.imageUrls || []),
             createdAt: serverTimestamp(),
             rating: 0,
-            ratingCount: 0
+            ratingCount: 0,
+            refundUntil: data.refundUntil || ""
         };
 
         // Clean undefined
@@ -67,6 +68,11 @@ export class WorkshopController {
     // Update Workshop
     static async updateWorkshop(id: string, data: Partial<Workshop>, newImages?: File[]): Promise<void> {
         const updateData: any = { ...data }; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+        // Ensure refundUntil is included in updateData if present
+        if (data.refundUntil !== undefined) {
+            updateData.refundUntil = data.refundUntil;
+        }
 
         if (newImages && newImages.length > 0) {
             const uploadPromises = newImages.map(async (file, index) => {

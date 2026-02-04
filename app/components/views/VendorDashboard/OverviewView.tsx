@@ -2,8 +2,9 @@ import React from 'react';
 import { Workshop } from "@/app/models/Workshop";
 import { UserData } from "@/app/context/AuthContext";
 import { Participant } from "@/app/models/Participant";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { GlassCard } from "@/app/components/ui/GlassCard";
+import dayjs from "dayjs";
 
 interface OverviewViewProps {
     userData: UserData;
@@ -11,32 +12,62 @@ interface OverviewViewProps {
     participants: Participant[];
     totalRevenue: number;
     participantsMap: Record<string, Participant[]>;
+    onCreate: () => void;
 }
 
-export const OverviewView: React.FC<OverviewViewProps> = ({ userData, workshops, participants, totalRevenue, participantsMap }) => {
+export const OverviewView: React.FC<OverviewViewProps> = React.memo(({ userData, workshops, participants, totalRevenue, participantsMap, onCreate }) => {
 
     // Stats Logic (Pure View Logic)
-    const activeParticipants = participants.filter(p => ['paid', 'approved', 'pending'].includes(p.status || ''));
+    const activeParticipants = participants.filter(p =>
+        ['paid', 'approved', 'pending', 'confirmed', 'refund_requested', 'refund_rejected'].includes(p.status || '')
+    );
+    const pendingParticipants = participants.filter(p => p.status === 'pending');
 
     const stats = [
-        { label: 'Total Revenue', value: `Rs. ${totalRevenue.toLocaleString()}`, icon: 'fa-coins', color: 'from-amber-500 to-orange-600', sub: '+12% from last month' },
-        { label: 'Active Workshops', value: workshops.length, icon: 'fa-rocket', color: 'from-blue-500 to-indigo-600', sub: '3 Pending Approval' },
-        { label: 'Total Participants', value: activeParticipants.length, icon: 'fa-users', color: 'from-emerald-500 to-teal-600', sub: '+24 new this week' },
-        { label: 'Avg. Rating', value: '4.9', icon: 'fa-star', color: 'from-purple-500 to-pink-600', sub: 'Based on 128 reviews' },
+        { label: 'Total Revenue', value: `Rs. ${totalRevenue.toLocaleString()}`, icon: 'fa-coins', color: 'from-amber-500 to-orange-600', sub: 'Gross Earnings' },
+        { label: 'Active Workshops', value: workshops.length, icon: 'fa-rocket', color: 'from-blue-500 to-indigo-600', sub: `${workshops.length} Listings Live` },
+        { label: 'Total Participants', value: activeParticipants.length, icon: 'fa-users', color: 'from-emerald-500 to-teal-600', sub: `${pendingParticipants.length} Awaiting Approval` },
+        { label: 'Avg. Rating', value: '5.0', icon: 'fa-star', color: 'from-purple-500 to-pink-600', sub: 'Verified Reviews' },
     ];
 
-    const chartData = [
-        { name: 'Mon', value: 4000 },
-        { name: 'Tue', value: 3000 },
-        { name: 'Wed', value: 2000 },
-        { name: 'Thu', value: 2780 },
-        { name: 'Fri', value: 1890 },
-        { name: 'Sat', value: 2390 },
-        { name: 'Sun', value: 3490 },
-    ];
+    // Chart Data Logic for Last 7 Days Revenue
+    const chartData = React.useMemo(() => {
+        const days = Array.from({ length: 7 }, (_, i) => {
+            const d = dayjs().subtract(6 - i, 'day');
+            return {
+                date: d.format('YYYY-MM-DD'),
+                name: d.format('ddd'), // Mon, Tue
+                value: 0
+            };
+        });
+
+        // Loop participants and sum up revenue if paid/approved/confirmed/refund_requested
+        participants.forEach(p => {
+            if (['paid', 'approved', 'confirmed', 'refund_requested', 'refund_rejected'].includes(p.status || '') && p.createdAt) {
+                // Try to convert timestamp or date string
+                let dateStr = "";
+
+                // Handle Firestore Timestamp or ISO String
+                // @ts-ignore
+                if (p.createdAt?.seconds) {
+                    // @ts-ignore
+                    dateStr = dayjs.unix(p.createdAt.seconds).format('YYYY-MM-DD');
+                } else if (typeof p.createdAt === 'string') {
+                    dateStr = dayjs(p.createdAt).format('YYYY-MM-DD');
+                }
+
+                const dayData = days.find(d => d.date === dateStr);
+                if (dayData) {
+                    dayData.value += (p.workshopPrice || 0);
+                }
+            }
+        });
+
+        return days;
+    }, [participants]);
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-8">
             {/* Welcome Banner */}
             <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-1">
                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
@@ -53,12 +84,15 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ userData, workshops,
                             </span>
                         </h2>
                         <p className="text-white/60 font-medium max-w-lg">
-                            Here&apos;s what&apos;s happening with your workshops today. You have <span className="text-white font-bold">12 new participants</span> waiting for approval.
+                            Here&apos;s what&apos;s happening with your workshops today. You have <span className="text-white font-bold">{pendingParticipants.length} new participants</span> waiting for approval.
                         </p>
                     </div>
                     {/* Mini Quick Action */}
                     <div className="flex gap-4">
-                        <button className="w-16 h-16 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white transition-all group">
+                        <button
+                            onClick={onCreate}
+                            className="w-16 h-16 rounded-2xl bg-white/10 hover:bg-primary hover:border-primary border border-white/10 flex items-center justify-center text-white transition-all group shadow-xl"
+                        >
                             <i className="fa-solid fa-plus text-xl group-hover:scale-110 transition-transform"></i>
                         </button>
                         <button className="w-16 h-16 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white transition-all group">
@@ -79,7 +113,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ userData, workshops,
                                     <i className={`fa-solid ${stat.icon} text-lg`}></i>
                                 </div>
                                 <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg">
-                                    <i className="fa-solid fa-arrow-trend-up mr-1"></i> 12%
+                                    <i className="fa-solid fa-arrow-trend-up mr-1"></i> Stable
                                 </span>
                             </div>
                             <h3 className="text-3xl font-black text-foreground tracking-tight mb-1">{stat.value}</h3>
@@ -114,7 +148,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ userData, workshops,
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
                                 <XAxis dataKey="name" stroke="#666" tick={{ fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} dy={10} />
-                                <YAxis stroke="#666" tick={{ fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} dx={-10} tickFormatter={(value) => `₹${value}`} />
+                                <YAxis stroke="#666" tick={{ fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} dx={-10} tickFormatter={(value) => `Rs.${value}`} />
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#000', border: '1px solid #333', borderRadius: '12px' }}
                                     itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
@@ -158,7 +192,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ userData, workshops,
                         {/* Ring Text */}
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none mb-8">
                             <div className="text-center">
-                                <span className="block text-2xl font-black text-foreground">12</span>
+                                <span className="block text-2xl font-black text-foreground">{workshops.length}</span>
                                 <span className="text-[9px] font-bold text-muted-foreground uppercase">Active</span>
                             </div>
                         </div>
@@ -167,4 +201,6 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ userData, workshops,
             </div>
         </div>
     );
-};
+});
+
+OverviewView.displayName = 'OverviewView';

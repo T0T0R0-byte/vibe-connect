@@ -3,12 +3,15 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { collection, getDocs, doc, updateDoc, deleteDoc, query, orderBy, addDoc, getCountFromServer, limit, startAfter, where, QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import { db } from "@/firebase/firebaseConfig";
 import { motion, AnimatePresence } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from 'recharts';
 import StatusBadge from "../components/ui/StatusBadge";
 import { uploadRefundProof } from "@/firebase/refundActions";
+import { Report } from "@/app/models/Report";
+import { sanitizeData } from "@/app/utils/serialize";
 
 interface User {
     id: string;
@@ -19,6 +22,7 @@ interface User {
     isVerified?: boolean;
     isSuspended?: boolean;
     businessIdUrl?: string;
+    phoneNumber?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     createdAt?: any;
 }
@@ -31,10 +35,14 @@ interface Registration {
     participantDetails?: {
         fullName: string;
         email?: string;
+        phone?: string;
+        age?: string;
+        address?: string;
     };
     workshopTitle?: string;
     workshopDate?: string;
     vendorName?: string;
+    vendorId?: string;
     consentUrl?: string;
     refundStatus?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,22 +55,25 @@ interface Registration {
     createdAt?: any;
     receiptUrl?: string;
     price?: number;
+    workshopPrice?: number;
 }
 
 export default function AdminDashboard() {
     const { user, userData, loading: authLoading } = useAuth();
     const router = useRouter();
 
-    const [activeSection, setActiveSection] = useState<"users" | "registrations" | "overview" | "workshops" | "admins">("overview");
+    const [activeSection, setActiveSection] = useState<"users" | "registrations" | "overview" | "workshops" | "admins" | "reports">("overview");
+    const [reports, setReports] = useState<Report[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [workshops, setWorkshops] = useState<any[]>([]);
+    const [vendorsMap, setVendorsMap] = useState<Record<string, string>>({});
     const [registrations, setRegistrations] = useState<Registration[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Optimization States
     const [totalRevenue, setTotalRevenue] = useState(0);
-    const [stats, setStats] = useState({ userCount: 0, workshopCount: 0 });
+    const [stats, setStats] = useState({ userCount: 0, workshopCount: 0, vendorCount: 0, participantCount: 0, adminCount: 0 });
     const [lastRegDoc, setLastRegDoc] = useState<QueryDocumentSnapshot | null>(null);
     const [hasMoreRegs, setHasMoreRegs] = useState(true);
     const [fetchingMoreRegs, setFetchingMoreRegs] = useState(false);
@@ -141,6 +152,16 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleToggleFreezeWorkshop = async (workshopId: string, currentFrozen: boolean) => {
+        try {
+            await updateDoc(doc(db, "workshops", workshopId), { isFrozen: !currentFrozen });
+            setWorkshops(workshops.map(w => w.id === workshopId ? { ...w, isFrozen: !currentFrozen } : w));
+        } catch (error) {
+            console.error("Error toggling workshop freeze status", error);
+            alert("Failed to update workshop status");
+        }
+    };
+
     useEffect(() => {
         if (authLoading) return;
         if (!user) { router.push("/login"); return; }
@@ -159,6 +180,9 @@ export default function AdminDashboard() {
         if (activeSection === 'workshops' && workshops.length === 0) {
             fetchWorkshops();
         }
+        if (activeSection === 'reports' && reports.length === 0) {
+            fetchReports();
+        }
     }, [activeSection]);
 
     const fetchOverviewStats = async () => {
@@ -168,57 +192,88 @@ export default function AdminDashboard() {
             const userColl = collection(db, "users");
             const wsColl = collection(db, "workshops");
             const regColl = collection(db, "registrations");
+            const reportsColl = collection(db, "reports");
 
-            const [userCount, wsCount, regSnap, wsSnap] = await Promise.all([
+            const [userCount, wsCount, regSnap, wsSnap, vendorSnap, recentUsersSnap, participantSnap, adminSnap] = await Promise.all([
                 getCountFromServer(userColl),
                 getCountFromServer(wsColl),
-                getDocs(query(regColl, orderBy("createdAt", "desc"), limit(10))), // Recent only
-                getDocs(wsColl) // Need all WS for revenue calc effectively? Or just iterate all regs?
-                // For Revenue, we really need to sum paid registrations. 
-                // Getting ALL registrations just for revenue is heavy. 
-                // Optimization: Create a 'stats' document in Firestore that aggregates this?
-                // For now, let's fetch 'paid' registrations only for revenue calculation if possible, or just accept the cost for revenue.
-                // Let's rely on recent 10 for the feed, and maybe a separate calculateRevenue call later?
+                getDocs(query(regColl, orderBy("createdAt", "desc"), limit(20))),
+                getDocs(wsColl),
+                getDocs(query(userColl, where("role", "==", "vendor"))),
+                getDocs(query(userColl, orderBy("createdAt", "desc"), limit(5))),
+                getDocs(query(userColl, where("role", "==", "user"), limit(1))), // Use getDocs with limit 1 as getCountFromServer might be cached or slow
+                getDocs(query(userColl, where("role", "==", "admin"), limit(1)))
             ]);
+
+            // For accurate visualization, better to use getCountFromServer for all roles if possible
+            const [pCount, vCount, aCount] = await Promise.all([
+                getCountFromServer(query(userColl, where("role", "==", "user"))),
+                getCountFromServer(query(userColl, where("role", "==", "vendor"))),
+                getCountFromServer(query(userColl, where("role", "==", "admin")))
+            ]);
+
+            const vMap: Record<string, string> = {};
+            vendorSnap.docs.forEach(d => {
+                const data = d.data();
+                vMap[d.id] = data.businessName || data.displayName || "Master Artist";
+            });
+            setVendorsMap(vMap);
 
             setStats({
                 userCount: userCount.data().count,
-                workshopCount: wsCount.data().count
+                workshopCount: wsCount.data().count,
+                vendorCount: vCount.data().count,
+                participantCount: pCount.data().count,
+                adminCount: aCount.data().count
+            });
+
+            // Map Recent Users
+            const recentUsers = recentUsersSnap.docs.map(doc => sanitizeData({ id: doc.id, ...doc.data() }) as User);
+            setUsers(prev => {
+                // Merge with existing users if any, keeping recent ones at the top
+                const combined = [...recentUsers, ...prev.filter(u => !recentUsers.find(ru => ru.id === u.id))];
+                return combined;
             });
 
             // Map Recent Registrations
-            const wsMap: Record<string, string> = {};
-            wsSnap.docs.forEach(d => wsMap[d.id] = d.data().title);
+            const wsMap: Record<string, { title: string; price: number }> = {};
+            wsSnap.docs.forEach(d => {
+                const data = d.data();
+                wsMap[d.id] = { title: data.title, price: data.price || 0 };
+            });
 
             const recentRegs = regSnap.docs.map(doc => {
-                const d = doc.data();
+                const d = sanitizeData(doc.data());
                 return {
                     id: doc.id,
                     ...d,
-                    workshopTitle: d.workshopTitle || wsMap[d.workshopId] || "Unknown Workshop",
-                    price: d.price || undefined // Will be populated from WS map if not in doc
+                    workshopTitle: d.workshopTitle || wsMap[d.workshopId]?.title || "Unknown Workshop",
+                    price: d.price || d.workshopPrice || wsMap[d.workshopId]?.price || 0
                 } as Registration;
             });
-            // Enrich with price from loaded workshops if missing
-            const enrichedRegs = recentRegs.map(r => {
-                const ws = workshops.find(w => w.id === r.workshopId);
-                return { ...r, price: r.price || ws?.price || 0 };
-            });
 
-            setRegistrations(enrichedRegs); // Initialize with recent
+            setRegistrations(recentRegs);
             setLastRegDoc(regSnap.docs[regSnap.docs.length - 1] || null);
-            setWorkshops(wsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-            // Revenue Calculation - Approximate or Full?
-            // If we want exact revenue without fetching all regs, we need server-side aggregation.
-            // fallback: Iterate workshops and sum price * capacity? No, that's max.
-            // Let's skip heavy revenue calc for initial load or do a specific 'paid' query.
-            // const paidRegs = await getDocs(query(regColl, where("status", "==", "paid")));
-            // const rev = paidRegs.docs.reduce(...) -> This is still heavy if 10k items.
-            // Placeholder for now.
-            setTotalRevenue(0); // TODO: Implement dedicated revenue aggregation
+            // Fetch Reports for alerts
+            const reportsSnap = await getDocs(query(reportsColl, where("status", "==", "pending")));
+            setReports(reportsSnap.docs.map(d => sanitizeData({ id: d.id, ...d.data() }) as Report));
 
-        } catch (e) { console.error(e); }
+            // Revenue calculation
+            const allRegsSnap = await getDocs(collection(db, "registrations"));
+            const total = allRegsSnap.docs.reduce((acc, doc) => {
+                const data = doc.data();
+                if (['paid', 'approved', 'confirmed', 'refund_requested'].includes(data.status)) {
+                    return acc + (data.price || data.workshopPrice || wsMap[data.workshopId]?.price || 0);
+                }
+                return acc;
+            }, 0);
+            setTotalRevenue(total);
+            setWorkshops(wsSnap.docs.map(d => sanitizeData({ id: d.id, ...d.data() })));
+
+        } catch (e) {
+            console.error("Error fetching overview stats:", e);
+        }
         setLoading(false);
     };
 
@@ -235,13 +290,14 @@ export default function AdminDashboard() {
             workshops.forEach(w => wsMap[w.id] = w.title); // Use existing loaded workshops
 
             const newRegs = snap.docs.map(doc => {
-                const d = doc.data();
+                const d = sanitizeData(doc.data());
                 return {
                     id: doc.id,
                     ...d,
                     workshopTitle: d.workshopTitle || wsMap[d.workshopId] || "Unknown Workshop",
+                    vendorName: d.vendorName || vendorsMap[d.vendorId] || "Master Artist",
                     price: d.price // Try to get from doc first
-                } as Registration; // Simplified mapping
+                } as Registration;
             })
                 .map(r => {
                     const ws = workshops.find(w => w.id === r.workshopId);
@@ -272,11 +328,26 @@ export default function AdminDashboard() {
         // already fetched in overview stats for basic info, maybe fetch more details if needed
     };
 
+    const fetchReports = async () => {
+        const { sanitizeData } = await import("@/app/utils/serialize");
+        try {
+            // Requirement Sync: Capture thorough audit trail for reports
+            const q = query(collection(db, "reports"), orderBy("timestamp", "desc"), limit(50));
+            const snap = await getDocs(q);
+            const list = snap.docs.map(d => sanitizeData({ id: d.id, ...d.data() }) as Report);
+            setReports(list);
+        } catch (e) {
+            console.error("Error fetching reports", e);
+        }
+    };
+
     const refreshData = async () => {
         await fetchOverviewStats();
         if (activeSection === 'users') fetchUsers();
         if (activeSection === 'registrations') fetchRegistrations(true);
+        if (activeSection === 'registrations') fetchRegistrations(true);
         if (activeSection === 'workshops') fetchWorkshops();
+        if (activeSection === 'reports') fetchReports();
     };
 
     const handleVerifyVendor = async (userId: string) => {
@@ -304,6 +375,17 @@ export default function AdminDashboard() {
             await finalizeRefund(regId, action);
             refreshData();
         } catch (e) { alert("Action failed"); }
+    };
+
+    const handleReportAction = async (reportId: string, action: 'resolved' | 'dismissed') => {
+        if (!confirm(`Mark this report as ${action}?`)) return;
+        try {
+            await updateDoc(doc(db, "reports", reportId), { status: action });
+            setReports(reports.map(r => r.id === reportId ? { ...r, status: action } : r));
+        } catch (e) {
+            console.error(e);
+            alert("Failed to update report status");
+        }
     };
 
     const handleUploadProof = async () => {
@@ -348,12 +430,11 @@ export default function AdminDashboard() {
     };
 
     const dashboardStats = [
+        { label: "Revenue", value: `Rs. ${totalRevenue.toLocaleString()}`, icon: "fa-money-bill-trend-up", color: "text-emerald-500", bg: "bg-emerald-500/10", action: () => setActiveSection('registrations') },
         { label: "Total Users", value: stats.userCount, icon: "fa-users", color: "text-blue-500", bg: "bg-blue-500/10", action: () => { setActiveSection('users'); setUserRoleFilter('all'); } },
-        { label: "Vendors", value: "N/A", icon: "fa-user-tie", color: "text-purple-500", bg: "bg-purple-500/10", action: () => { setActiveSection('users'); setUserRoleFilter('vendor'); } }, // Difficult to count without query
-        { label: "Total Workshops", value: stats.workshopCount, icon: "fa-calendar-days", color: "text-green-500", bg: "bg-green-500/10", action: () => setActiveSection('workshops') },
-        // Showing loaded count for now or need specific counts
-        { label: "Refund Requests", value: "View", icon: "fa-hand-holding-dollar", color: "text-orange-500", bg: "bg-orange-500/10", action: () => setActiveSection('registrations') },
-        { label: "Admins", value: "Manage", icon: "fa-user-shield", color: "text-red-500", bg: "bg-red-500/10", action: () => { setActiveSection('users'); setUserRoleFilter('admin'); } },
+        { label: "Active Reports", value: reports.filter(r => r.status === 'pending').length, icon: "fa-triangle-exclamation", color: "text-red-500", bg: "bg-red-500/10", action: () => setActiveSection('reports') },
+        { label: "Vendors", value: stats.vendorCount, icon: "fa-user-tie", color: "text-purple-500", bg: "bg-purple-500/10", action: () => { setActiveSection('users'); setUserRoleFilter('vendor'); } },
+        { label: "Workshops", value: stats.workshopCount, icon: "fa-calendar-days", color: "text-indigo-500", bg: "bg-indigo-500/10", action: () => setActiveSection('workshops') },
     ];
 
 
@@ -437,6 +518,7 @@ export default function AdminDashboard() {
                         { id: "users", label: "Users", icon: "fa-users-gear" },
                         { id: "workshops", label: "Workshops", icon: "fa-calendar-days" },
                         { id: "registrations", label: "Refunds & Payments", icon: "fa-receipt" },
+                        { id: "reports", label: "Reports", icon: "fa-triangle-exclamation" },
                         { id: "admins", label: "Manage Admins", icon: "fa-user-shield" },
                     ].map((item) => (
                         <button
@@ -453,11 +535,7 @@ export default function AdminDashboard() {
                     ))}
                 </nav>
 
-                <div className="pt-8 border-t border-white/5">
-                    <button onClick={() => setActiveSection("registrations")} className={`w-full text-left px-6 py-4 rounded-xl transition-all flex items-center gap-4 ${activeSection === "registrations" ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20" : "text-muted-foreground hover:bg-white/5"}`}>
-                        <i className="fa-solid fa-scale-balanced text-xl w-8 text-center"></i>
-                        <span className="font-bold uppercase tracking-widest text-xs">Global Finance</span>
-                    </button>
+                <div className="pt-8 border-t border-white/5 space-y-2">
                     <button onClick={() => router.push('/')} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-muted-foreground hover:bg-white/5 transition-all">
                         <i className="fa-solid fa-arrow-right-from-bracket text-lg w-6"></i>
                         <span className="text-sm">Back to Home</span>
@@ -476,9 +554,10 @@ export default function AdminDashboard() {
                                 {activeSection === "overview" && "System Overview"}
                                 {activeSection === "users" && "User Management"}
                                 {activeSection === "registrations" && "Payments"}
+                                {activeSection === "reports" && "Issue Reports"}
                                 {activeSection === "admins" && "System Access"}
                             </h1>
-                            <p className="text-sm font-bold text-muted-foreground">Managing {users.length} users and {registrations.length} events</p>
+                            <p className="text-sm font-bold text-muted-foreground">Managing {users.length} users, {registrations.length} events, and {reports.length > 0 ? reports.length : 'no'} reports</p>
                         </div>
                         <div className="relative w-full md:w-80">
                             <i className="fa-solid fa-magnifying-glass absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm"></i>
@@ -519,15 +598,28 @@ export default function AdminDashboard() {
                                         </div>
                                         <div className="h-[250px] w-full">
                                             <ResponsiveContainer width="100%" height="100%">
-                                                <AreaChart data={registrations.slice(0, 7).map(r => ({ date: new Date(r.createdAt?.seconds * 1000).toLocaleDateString(), value: 1 }))}>
+                                                <AreaChart data={(() => {
+                                                    const groups: Record<string, number> = {};
+                                                    registrations.forEach(r => {
+                                                        const date = r.createdAt?.seconds
+                                                            ? new Date(r.createdAt.seconds * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                                                            : new Date(r.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                                                        groups[date] = (groups[date] || 0) + 1;
+                                                    });
+                                                    return Object.entries(groups).map(([date, count]) => ({ date, value: count })).reverse();
+                                                })()}>
                                                     <defs>
                                                         <linearGradient id="colorTraffic" x1="0" y1="0" x2="0" y2="1">
                                                             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
                                                             <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
                                                         </linearGradient>
                                                     </defs>
-                                                    {/* Mock data visualization for now as aggregation logic needs moment/date-fns */}
-                                                    <XAxis dataKey="date" hide />
+                                                    <XAxis
+                                                        dataKey="date"
+                                                        tick={{ fill: '#666', fontSize: 10, fontWeight: 900 }}
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                    />
                                                     <Tooltip
                                                         contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
                                                         itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
@@ -546,14 +638,15 @@ export default function AdminDashboard() {
                                         <div className="h-[250px] w-full">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart data={[
-                                                    { name: 'Participants', value: users.filter(u => u.role === 'user').length },
-                                                    { name: 'Vendors', value: users.filter(u => u.role === 'vendor').length },
-                                                    { name: 'Admins', value: users.filter(u => u.role === 'admin').length }
+                                                    { name: 'Participants', value: stats.participantCount },
+                                                    { name: 'Vendors', value: stats.vendorCount },
+                                                    { name: 'Admins', value: stats.adminCount }
                                                 ]}>
                                                     <XAxis dataKey="name" tick={{ fill: '#666', fontSize: 10, fontWeight: 900 }} axisLine={false} tickLine={false} />
                                                     <Tooltip
                                                         cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                                                         contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                                                        itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
                                                     />
                                                     <Bar dataKey="value" fill="#ec4899" radius={[10, 10, 0, 0]} barSize={40} />
                                                 </BarChart>
@@ -593,18 +686,79 @@ export default function AdminDashboard() {
                                             <h3 className="text-xl font-black text-foreground">Critical Alerts</h3>
                                             <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
                                         </div>
-                                        <div className="p-8 space-y-4">
-                                            {registrations.filter(r => r.refundStatus === 'participant_disputed').length > 0 ? (
-                                                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-4 text-red-500">
-                                                    <i className="fa-solid fa-triangle-exclamation text-xl"></i>
-                                                    <p className="text-xs font-bold">You have active refund disputes requiring intervention.</p>
-                                                </div>
-                                            ) : (
-                                                <div className="p-12 text-center text-muted-foreground">
-                                                    <i className="fa-solid fa-shield-check text-4xl mb-4 text-green-500/40"></i>
-                                                    <p className="text-sm font-bold uppercase tracking-widest">Systems Clear</p>
-                                                </div>
-                                            )}
+                                        <div className="p-8 space-y-4 max-h-[350px] overflow-y-auto">
+                                            {/* Actionable Alerts Data */}
+                                            {(() => {
+                                                const alerts = [];
+
+                                                // 1. Pending Reports
+                                                const pendingReports = reports.filter(r => r.status === 'pending');
+                                                if (pendingReports.length > 0) {
+                                                    alerts.push({
+                                                        id: 'rep',
+                                                        title: `${pendingReports.length} Unresolved Reports`,
+                                                        desc: 'User reports requiring investigation',
+                                                        icon: 'fa-triangle-exclamation',
+                                                        color: 'text-red-500',
+                                                        bg: 'bg-red-500/10',
+                                                        action: () => setActiveSection('reports')
+                                                    });
+                                                }
+
+                                                // 2. Pending Vendor Verifications
+                                                const pendingVendors = users.filter(u => u.role === 'vendor' && !u.isVerified);
+                                                if (pendingVendors.length > 0) {
+                                                    alerts.push({
+                                                        id: 'ven',
+                                                        title: `${pendingVendors.length} Pending Verifications`,
+                                                        desc: 'Vendors waiting for account approval',
+                                                        icon: 'fa-user-check',
+                                                        color: 'text-blue-500',
+                                                        bg: 'bg-blue-500/10',
+                                                        action: () => setActiveSection('users')
+                                                    });
+                                                }
+
+                                                // 3. Refund Requests
+                                                const pendingRefunds = registrations.filter(r => r.status === 'refund_requested');
+                                                if (pendingRefunds.length > 0) {
+                                                    alerts.push({
+                                                        id: 'ref',
+                                                        title: `${pendingRefunds.length} Refund Requests`,
+                                                        desc: 'Active refund claims requiring review',
+                                                        icon: 'fa-money-bill-transfer',
+                                                        color: 'text-orange-500',
+                                                        bg: 'bg-orange-500/10',
+                                                        action: () => setActiveSection('registrations')
+                                                    });
+                                                }
+
+                                                if (alerts.length === 0) {
+                                                    return (
+                                                        <div className="py-12 text-center text-muted-foreground">
+                                                            <i className="fa-solid fa-shield-check text-4xl mb-4 text-green-500/40"></i>
+                                                            <p className="text-sm font-bold uppercase tracking-widest text-[#666]">Systems Clear</p>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                return alerts.map(alert => (
+                                                    <div
+                                                        key={alert.id}
+                                                        onClick={alert.action}
+                                                        className={`p-4 ${alert.bg} border border-white/5 rounded-2xl flex items-center gap-4 cursor-pointer hover:border-white/10 transition-all group`}
+                                                    >
+                                                        <div className={`w-10 h-10 ${alert.bg} ${alert.color} rounded-xl flex items-center justify-center text-sm group-hover:scale-110 transition-transform`}>
+                                                            <i className={`fa-solid ${alert.icon}`}></i>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <p className={`text-xs font-black uppercase tracking-tight ${alert.color}`}>{alert.title}</p>
+                                                            <p className="text-[10px] font-bold text-muted-foreground uppercase opacity-60">{alert.desc}</p>
+                                                        </div>
+                                                        <i className="fa-solid fa-chevron-right text-[10px] text-muted-foreground mr-2"></i>
+                                                    </div>
+                                                ));
+                                            })()}
                                         </div>
                                     </div>
                                 </div>
@@ -654,7 +808,7 @@ export default function AdminDashboard() {
                                                             </div>
                                                             <div>
                                                                 <p className={`text-sm font-black ${u.isSuspended ? 'text-muted-foreground line-through' : 'text-foreground hover:text-primary transition-colors cursor-pointer'}`}>{u.displayName}</p>
-                                                                <p className="text-[10px] font-bold text-muted-foreground">{u.email}</p>
+                                                                <p className="text-[10px] font-bold text-muted-foreground">{u.email} {u.phoneNumber && <span className="text-primary ml-2">• {u.phoneNumber}</span>}</p>
                                                             </div>
                                                         </div>
                                                     </td>
@@ -667,6 +821,8 @@ export default function AdminDashboard() {
                                                         </div>
                                                     </td>
                                                     <td className="px-8 py-6">
+                                                        {/* Vendor Verification: Admins must review the Business ID and approve only valid creators */}
+                                                        {/* Verified creators gain full privileges like workshop creation ads */}
                                                         {u.role === 'vendor' ? (
                                                             <div className="space-y-2">
                                                                 {u.isVerified ? (
@@ -741,7 +897,13 @@ export default function AdminDashboard() {
                                                         <div className="flex items-center gap-4">
                                                             <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/5 shrink-0">
                                                                 {w.imageUrl ? (
-                                                                    <img src={w.imageUrl} className="w-full h-full object-cover" />
+                                                                    <Image
+                                                                        src={w.imageUrl}
+                                                                        alt={w.title || "Workshop"}
+                                                                        fill
+                                                                        className="object-cover"
+                                                                        sizes="48px"
+                                                                    />
                                                                 ) : (
                                                                     <div className="w-full h-full flex items-center justify-center bg-white/5">
                                                                         <i className="fa-solid fa-image text-white/20"></i>
@@ -755,7 +917,7 @@ export default function AdminDashboard() {
                                                         </div>
                                                     </td>
                                                     <td className="px-8 py-6">
-                                                        <p className="text-xs font-black text-foreground hover:text-primary transition-colors cursor-pointer">{w.vendorName}</p>
+                                                        <p className="text-xs font-black text-foreground hover:text-primary transition-colors cursor-pointer">{vendorsMap[w.vendorId] || w.vendorName || "Admin"}</p>
                                                     </td>
                                                     <td className="px-8 py-6">
                                                         <span className="text-xs font-bold text-muted-foreground">{new Date(w.date).toLocaleDateString()}</span>
@@ -765,6 +927,12 @@ export default function AdminDashboard() {
                                                     </td>
                                                     <td className="px-8 py-6 text-right">
                                                         <div className="flex gap-2 justify-end">
+                                                            <button
+                                                                onClick={() => handleToggleFreezeWorkshop(w.id, w.isFrozen)}
+                                                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all border ${w.isFrozen ? 'bg-amber-500/10 border-amber-500/20 text-amber-500 hover:bg-amber-500/20' : 'bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10'}`}
+                                                            >
+                                                                {w.isFrozen ? "Release" : "Freeze"}
+                                                            </button>
                                                             <button
                                                                 onClick={() => handleOpenWorkshopModal(w)}
                                                                 className="px-4 py-2 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-xl text-[9px] font-black uppercase hover:bg-blue-500/20 transition-all"
@@ -829,7 +997,7 @@ export default function AdminDashboard() {
                                                         <th className="px-8 py-6">Participant</th>
                                                         <th className="px-8 py-6">Workshop / Vendor</th>
                                                         <th className="px-8 py-6">Status</th>
-                                                        <th className="px-8 py-6">Receipt</th>
+                                                        {/* Receipt Removed */}
                                                         <th className="px-8 py-6 text-right">Actions</th>
                                                     </tr>
                                                 </thead>
@@ -838,21 +1006,22 @@ export default function AdminDashboard() {
                                                         <tr key={r.id} className="hover:bg-white/5 transition-all">
                                                             <td className="px-8 py-6">
                                                                 <p className="text-sm font-black text-foreground">{r.participantDetails?.fullName || "Guest"}</p>
-                                                                <p className="text-[10px] font-bold text-muted-foreground">ID: {r.id.slice(0, 8)}</p>
+                                                                <div className="flex flex-col gap-0.5 mt-1">
+                                                                    <p className="text-[10px] font-bold text-muted-foreground flex items-center gap-1.5 hover:text-primary transition-colors cursor-default">
+                                                                        <i className="fa-solid fa-phone scale-75"></i> {r.participantDetails?.phone || "No Phone"}
+                                                                    </p>
+                                                                    <p className="text-[10px] font-bold text-muted-foreground/50 flex items-center gap-1.5 hover:text-primary transition-colors cursor-default">
+                                                                        <i className="fa-solid fa-envelope scale-75"></i> {r.participantDetails?.email || "No Email"}
+                                                                    </p>
+                                                                </div>
+                                                                <p className="text-[10px] font-bold text-muted-foreground/30 mt-1">ID: {r.id.slice(0, 8)}</p>
                                                             </td>
                                                             <td className="px-8 py-6">
                                                                 <p className="text-xs font-bold text-foreground">{r.workshopTitle}</p>
-                                                                <p className="text-[10px] text-muted-foreground uppercase">{r.vendorName}</p>
+                                                                <p className="text-[10px] text-muted-foreground uppercase">{vendorsMap[r.vendorId || ''] || r.vendorName}</p>
                                                             </td>
                                                             <td className="px-8 py-6">
                                                                 <StatusBadge status={r.status} />
-                                                            </td>
-                                                            <td className="px-8 py-6">
-                                                                {r.receiptUrl ? (
-                                                                    <a href={r.receiptUrl} target="_blank" className="text-[9px] font-bold text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-tight flex items-center gap-1.5 p-1 hover:bg-white/5 rounded w-fit">
-                                                                        <i className="fa-solid fa-receipt w-4"></i> View
-                                                                    </a>
-                                                                ) : <span className="text-muted-foreground">-</span>}
                                                             </td>
                                                             <td className="px-8 py-6 text-right">
                                                                 {r.status === 'pending' && (
@@ -906,7 +1075,11 @@ export default function AdminDashboard() {
                                                                     <h4 className="text-lg font-black text-foreground">{r.participantDetails?.fullName}</h4>
                                                                     <StatusBadge status={r.refundStatus || ''} type="refund" />
                                                                 </div>
-                                                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wide mb-2">{r.workshopTitle} <span className="opacity-50">•</span> {r.vendorName}</p>
+                                                                <div className="flex items-center gap-4 mb-2">
+                                                                    <p className="text-[10px] font-bold text-muted-foreground"><i className="fa-solid fa-phone mr-1 opacity-70"></i> {r.participantDetails?.phone || "No Phone"}</p>
+                                                                    <p className="text-[10px] font-bold text-muted-foreground"><i className="fa-solid fa-envelope mr-1 opacity-70"></i> {r.participantDetails?.email || "No Email"}</p>
+                                                                </div>
+                                                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wide mb-2">{r.workshopTitle} <span className="opacity-50">•</span> {vendorsMap[r.vendorId || ''] || r.vendorName}</p>
                                                                 <div className="flex gap-4">
                                                                     {r.receiptUrl && <a href={r.receiptUrl} target="_blank" className="text-[9px] font-bold text-blue-400 uppercase tracking-tight hover:underline">Receipt</a>}
                                                                     {r.consentUrl && <a href={r.consentUrl} target="_blank" className="text-[9px] font-bold text-purple-400 uppercase tracking-tight hover:underline">Consent</a>}
@@ -1093,6 +1266,119 @@ export default function AdminDashboard() {
                             </motion.div>
                         )}
 
+                        {activeSection === "reports" && (
+                            <motion.div key="reports" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="space-y-8">
+                                <div className="glass-card !p-0 overflow-hidden border-white/10 shadow-2xl">
+                                    <div className="p-8 bg-red-500/5 border-b border-white/5 flex justify-between items-center">
+                                        <div className="flex items-center gap-4 text-red-500">
+                                            <i className="fa-solid fa-triangle-exclamation text-2xl"></i>
+                                            <div>
+                                                <h3 className="text-xl font-black uppercase tracking-tight">System Reports</h3>
+                                                <p className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest">User & Vendor Issues</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-secondary/50 border-b border-white/5 uppercase text-[10px] font-black tracking-widest text-muted-foreground">
+                                                <tr>
+                                                    <th className="px-8 py-6">Reporter</th>
+                                                    <th className="px-8 py-6">Reported Vendor/Details</th>
+                                                    <th className="px-8 py-6">Reason</th>
+                                                    <th className="px-8 py-6">Status</th>
+                                                    <th className="px-8 py-6 text-right">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {reports.map(report => (
+                                                    <tr key={report.id} className="hover:bg-white/5 transition-all">
+                                                        <td className="px-8 py-6">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-sm font-black text-foreground">{report.reporterName}</span>
+                                                                <span className="text-[10px] text-muted-foreground">{report.reporterEmail}</span>
+                                                                {/* Contact Info Sync: Displaying details from the specific registration for this report */}
+                                                                {(() => {
+                                                                    const reg = registrations.find(r => r.id === report.registrationId);
+                                                                    if (reg?.participantDetails) {
+                                                                        const pd = reg.participantDetails;
+                                                                        return (
+                                                                            <div className="mt-2 p-2 bg-primary/5 rounded-lg border border-primary/10">
+                                                                                <p className="text-[9px] font-bold text-primary uppercase tracking-widest mb-1">Registration Details:</p>
+                                                                                <p className="text-[10px] text-foreground font-medium"><i className="fa-solid fa-phone mr-1 scale-75 opacity-70"></i> {pd.phone || report.reporterPhone}</p>
+                                                                                {pd.age && <p className="text-[10px] text-foreground font-medium"><i className="fa-solid fa-cake-candles mr-1 scale-75 opacity-70"></i> Age: {pd.age}</p>}
+                                                                                {pd.address && <p className="text-[10px] text-muted-foreground mt-1 text-[9px] italic leading-tight">{pd.address}</p>}
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    return <span className="text-[10px] text-muted-foreground">{report.reporterPhone}</span>;
+                                                                })()}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-8 py-6">
+                                                            {/* Sync: Displays full purchase context from the User's report */}
+                                                            {/* Fallback logic ensures data is visible even for legacy/incomplete reports */}
+                                                            <div className="flex flex-col">
+                                                                <span className="text-xs font-bold text-foreground">Vendor: {vendorsMap[report.vendorId] || report.vendorId}</span>
+                                                                <span className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">Ref: {report.registrationId}</span>
+                                                                <span className="text-[10px] text-primary font-black uppercase mt-1">
+                                                                    {report.workshopTitle || workshops.find(w => w.id === report.workshopId)?.title || "Workshop Details N/A"}
+                                                                </span>
+                                                                <span className="text-[10px] text-emerald-500 font-bold mt-0.5">
+                                                                    Paid: Rs. {(report.purchasePrice || registrations.find(r => r.id === report.registrationId)?.price || 0).toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-8 py-6">
+                                                            <div className="max-w-xs">
+                                                                <span className="block text-xs font-black text-foreground mb-1">{report.reason}</span>
+                                                                <p className="text-[10px] text-muted-foreground leading-relaxed line-clamp-2 hover:line-clamp-none transition-all cursor-help" title={report.details}>
+                                                                    {report.details}
+                                                                </p>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-8 py-6">
+                                                            <StatusBadge status={report.status} type="refund" />
+                                                        </td>
+                                                        <td className="px-8 py-6 text-right">
+                                                            {report.status === 'pending' && (
+                                                                <div className="flex items-center justify-end gap-2">
+                                                                    <button
+                                                                        onClick={() => handleReportAction(report.id!, 'resolved')}
+                                                                        className="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-black uppercase hover:bg-emerald-500 hover:text-white transition-all"
+                                                                    >
+                                                                        Resolve
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleReportAction(report.id!, 'dismissed')}
+                                                                        className="px-3 py-1.5 bg-white/5 text-muted-foreground border border-white/10 rounded-lg text-[9px] font-black uppercase hover:bg-white/10 hover:text-foreground transition-all"
+                                                                    >
+                                                                        Dismiss
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                            {report.status !== 'pending' && (
+                                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-50">
+                                                                    {report.status}
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {reports.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan={5} className="px-8 py-12 text-center text-muted-foreground">
+                                                            <i className="fa-solid fa-check-circle text-4xl mb-4 text-emerald-500/20"></i>
+                                                            <p className="text-xs font-bold uppercase tracking-widest">No Active Reports</p>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+
                         {/* Workshop Modal */}
                         <AnimatePresence>
                             {showWorkshopModal && (
@@ -1169,7 +1455,7 @@ export default function AdminDashboard() {
                         </AnimatePresence>
                     </AnimatePresence>
                 </div>
-            </main>
+            </main >
 
 
             <AnimatePresence>

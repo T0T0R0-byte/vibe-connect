@@ -1,1 +1,57 @@
-rules_version = '2';\n\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if request.auth != null;\n    }\n  }\n}
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function signedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function hasRole(role) {
+      return signedIn() && getUserData().role == role;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow write: if isOwner(userId);
+    }
+    
+    // Workshops Collection
+    match /workshops/{workshopId} {
+      allow read: if true;
+      allow create: if hasRole('vendor') || hasRole('admin');
+      allow update, delete: if hasRole('admin') || (signedIn() && resource.data.vendorId == request.auth.uid);
+    }
+    
+    // Registrations Collection
+    match /registrations/{regId} {
+      allow read: if signedIn() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.vendorId == request.auth.uid ||
+        hasRole('admin')
+      );
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if signedIn() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.vendorId == request.auth.uid ||
+        hasRole('admin')
+      );
+      allow delete: if hasRole('admin');
+    }
+
+    // Default deny for everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

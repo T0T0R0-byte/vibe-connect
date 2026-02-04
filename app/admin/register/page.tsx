@@ -21,7 +21,7 @@ export default function AdminRegisterPage() {
         setError("");
 
         // Simple security check to prevent unauthorized admin creation
-        if (secretCode !== "VIBE_MASTER_KEY_2025") {
+        if (secretCode !== process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY) {
             setError("Invalid Administrative Access Code");
             return;
         }

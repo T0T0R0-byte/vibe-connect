@@ -21,7 +21,9 @@ export default function FirebaseSetupHelp() {
             .map(([key]) => key);
 
         if (missing.length > 0) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setMissingKeys(missing);
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIsVisible(true);
         }
     }, []);

@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
-import { doc, updateDoc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, onSnapshot, setDoc } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/firebase/firebaseConfig";
@@ -12,6 +12,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { requestRefund } from "@/firebase/workshopActions";
 import { reportVendor } from "@/firebase/reportActions";
+import { getWorkshopImage } from "@/app/utils/workshopUtils";
+import { PremiumModal } from "@/app/components/ui/PremiumModal";
 
 // --- Types ---
 
@@ -28,6 +30,8 @@ interface Workshop {
     rating?: number;
     vendorId: string;
     whatsappLink?: string;
+    price?: number;
+    refundUntil?: string;
 }
 
 interface RegisteredWorkshop extends Workshop {
@@ -36,8 +40,13 @@ interface RegisteredWorkshop extends Workshop {
     status: string;
     registrationId: string; // Changed to required as it's our key
     participantName?: string;
+    participantPhone?: string;
+    participantEmail?: string;
+    participantAge?: string;
+    participantAddress?: string;
     ratingCount?: number;
     refundId?: string;
+    rejectionReason?: string;
 }
 
 interface CustomRequest {
@@ -118,6 +127,23 @@ function ProfileContent() {
     const [photoPreview, setPhotoPreview] = useState("");
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [modalConfig, setModalConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        type: "success" | "error" | "info" | "warning";
+        actionLabel?: string;
+        onAction?: () => void;
+    }>({
+        isOpen: false,
+        title: "",
+        message: "",
+        type: "info"
+    });
+
+    const showModal = (title: string, message: string, type: "success" | "error" | "info" | "warning" = "info", actionLabel?: string, onAction?: () => void) => {
+        setModalConfig({ isOpen: true, title, message, type, actionLabel, onAction });
+    };
 
     // Data State
     const [activeTab, setActiveTab] = useState<'registrations' | 'favorites' | 'requests'>('registrations');
@@ -132,6 +158,7 @@ function ProfileContent() {
     const [selectedWorkshopForReview, setSelectedWorkshopForReview] = useState<RegisteredWorkshop | null>(null);
     const [reviewRating, setReviewRating] = useState(5);
     const [reviewComment, setReviewComment] = useState("");
+    const [userReviews, setUserReviews] = useState<Record<string, any>>({}); // Cached user reviews
 
     // --- Effects ---
 
@@ -203,21 +230,29 @@ function ProfileContent() {
 
     // --- Actions ---
 
-    // Real-time listener for Registered Workshops
+    // Real-time listener for Registered Workshops & Reviews
     useEffect(() => {
         if (!user) return;
 
-        // Listen for all registrations for this user
+        // 1. Listen for user reviews to enable "Edit" mode and pre-fill
+        const reviewsQuery = query(collection(db, "reviews"), where("userId", "==", user.uid));
+        const unsubscribeReviews = onSnapshot(reviewsQuery, (snap) => {
+            const rMap: Record<string, any> = {};
+            snap.docs.forEach(d => {
+                const data = d.data();
+                rMap[data.workshopId] = { id: d.id, ...data };
+            });
+            setUserReviews(rMap);
+        });
+
+        // 2. Listen for all registrations for this user
         const q = query(collection(db, "registrations"), where("userId", "==", user.uid));
 
-        const unsubscribe = onSnapshot(q, async (snapshot) => {
+        const unsubscribeRegs = onSnapshot(q, async (snapshot) => {
             const regs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-            // For each registration, we need the workshop data. 
-            // Since workshop data changes less frequently than status, we can cache or fetch on change.
-            // For simplicity in this real-time update, we'll fetch workshop data if needed.
-
-            const promises = regs.map(async (reg: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+            // Optimization: Fetch all data concurrently
+            const results = await Promise.all(regs.map(async (reg: any) => {
                 const wsDoc = await getDoc(doc(db, "workshops", reg.workshopId));
                 if (!wsDoc.exists()) return null;
 
@@ -226,15 +261,14 @@ function ProfileContent() {
                 let vendorPhone = "";
 
                 if (wsData.vendorId) {
-                    // Ideally we should cache this user lookup too
                     const vDoc = await getDoc(doc(db, "users", wsData.vendorId));
                     if (vDoc.exists()) {
-                        vendorName = vDoc.data().displayName || vDoc.data().businessName || "Unknown";
+                        vendorName = vDoc.data().businessName || vDoc.data().displayName || "Unknown Vendor";
                         vendorPhone = vDoc.data().phoneNumber || "";
                     }
                 }
 
-                const result: RegisteredWorkshop = {
+                return {
                     ...wsData,
                     id: wsDoc.id,
                     vendorName,
@@ -242,18 +276,23 @@ function ProfileContent() {
                     status: reg.status,
                     registrationId: reg.id,
                     participantName: reg.participantDetails?.fullName || "Guest",
-                    ratingCount: wsData.rating || 0, // approximate mapping
-                    refundId: reg.refundId // Map refundId from registration
-                };
-                return result;
-            });
+                    participantPhone: reg.participantDetails?.phone || "",
+                    participantEmail: reg.userEmail || "",
+                    participantAge: reg.participantDetails?.age || "",
 
-            const results = await Promise.all(promises);
-            const validWorkshops = results.filter((w): w is RegisteredWorkshop => w !== null);
-            setRegisteredWorkshops(validWorkshops);
+                    participantAddress: reg.participantDetails?.address || "",
+                    refundId: reg.refundId,
+                    rejectionReason: reg.rejectionReason
+                } as RegisteredWorkshop;
+            }));
+
+            setRegisteredWorkshops(results.filter((w): w is RegisteredWorkshop => w !== null));
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribeReviews();
+            unsubscribeRegs();
+        };
     }, [user]);
 
     // Real-time listener for Reports
@@ -294,7 +333,7 @@ function ProfileContent() {
             window.location.reload();
         } catch (error) {
             console.error(error);
-            alert("Failed to update profile.");
+            showModal("Update Failed", "We couldn't update your profile. Please check your connection and try again.", "error");
         } finally {
             setSaving(false);
         }
@@ -303,40 +342,108 @@ function ProfileContent() {
     const handleSubmitReview = async () => {
         if (!selectedWorkshopForReview || !user) return;
         try {
-            // 1. Add Review Doc
-            await addDoc(collection(db, "reviews"), {
+            const existingReview = userReviews[selectedWorkshopForReview.id];
+            const reviewId = existingReview ? existingReview.id : `${user.uid}_${selectedWorkshopForReview.id}`;
+
+            // 1. Set Review Doc
+            const reviewRef = doc(db, "reviews", reviewId);
+            await setDoc(reviewRef, {
                 workshopId: selectedWorkshopForReview.id,
                 userId: user.uid,
                 userName: userData?.displayName || "Verified User",
                 rating: reviewRating,
                 comment: reviewComment,
-                createdAt: new Date().toISOString()
-            });
+                updatedAt: serverTimestamp(),
+                createdAt: existingReview?.createdAt || serverTimestamp()
+            }, { merge: true });
 
             // 2. Update Workshop Rating
-            const currentCount = selectedWorkshopForReview.ratingCount || 0;
-            const currentRating = selectedWorkshopForReview.rating || 5;
-            const newCount = currentCount + 1;
-            const newAverage = ((currentRating * currentCount) + reviewRating) / newCount;
+            const wsRef = doc(db, "workshops", selectedWorkshopForReview.id);
+            const wsSnap = await getDoc(wsRef);
+            if (wsSnap.exists()) {
+                const wsData = wsSnap.data();
+                const currentCount = wsData.ratingCount || 0;
+                const currentRating = wsData.rating || 5;
 
-            await updateDoc(doc(db, "workshops", selectedWorkshopForReview.id), {
-                rating: Number(newAverage.toFixed(1)),
-                ratingCount: newCount
-            });
+                let newCount = currentCount;
+                let newAverage = currentRating;
+
+                if (existingReview) {
+                    // Updating: (TotalSum - oldRating + newRating) / count
+                    newAverage = ((currentRating * currentCount) - existingReview.rating + reviewRating) / currentCount;
+                } else {
+                    // New: (TotalSum + newRating) / (count + 1)
+                    newCount = currentCount + 1;
+                    newAverage = ((currentRating * currentCount) + reviewRating) / newCount;
+                }
+
+                await updateDoc(wsRef, {
+                    rating: Number(newAverage.toFixed(1)),
+                    ratingCount: newCount
+                });
+
+                // 3. Update Vendor Rating
+                if (selectedWorkshopForReview.vendorId) {
+                    const vendorId = selectedWorkshopForReview.vendorId;
+                    // Recalculate vendor average from all their workshops or reviews?
+                    // Requirement: "Vendor’s Avg. Rating must recalculate instantly" based on "Total Stars / Total Reviews"
+                    // Best way: Query all REVIEWS where workshopId belongs to this vendor? No, reviews have workshopId.
+                    // Easier: Aggregate from WORKSHOPS. Vendor Rating = Avg of Workshop Ratings?
+                    // OR: Aggregate ALL reviews for vendor's workshops.
+                    // Given the prompt: "Avg Rating = (Total Stars / Total Reviews)"
+                    // I will query ALL reviews for workshops by this vendor.
+
+                    // First find all workshops by this vendor
+                    const wsQuery = query(collection(db, "workshops"), where("vendorId", "==", vendorId));
+                    const wsSnaps = await getDocs(wsQuery);
+                    const vendorWorkshopIds = wsSnaps.docs.map(d => d.id);
+
+                    if (vendorWorkshopIds.length > 0) {
+                        // Find reviews for these workshops
+                        // Firestore "in" query limited to 10. If > 10, need multiple queries or loop.
+                        // Safe approach: Client side aggregation might be too heavy if many reviews.
+                        // Better approach: Update Vendor Doc atomically if we stored totalStars/totalReviews on Vendor.
+                        // Assuming we didn't, I will use the Workshop Ratings to average the Vendor Rating (Proxy).
+                        // Weighted average: Sum(ws.rating * ws.ratingCount) / Sum(ws.ratingCount)
+
+                        let totalStars = 0;
+                        let totalReviews = 0;
+
+                        wsSnaps.docs.forEach(doc => {
+                            const d = doc.data();
+                            // Use the updated values for the CURRENT workshop
+                            if (doc.id === selectedWorkshopForReview.id) {
+                                totalStars += newAverage * newCount;
+                                totalReviews += newCount;
+                            } else {
+                                totalStars += (d.rating || 0) * (d.ratingCount || 0);
+                                totalReviews += (d.ratingCount || 0);
+                            }
+                        });
+
+                        const vendorRating = totalReviews > 0 ? (totalStars / totalReviews) : 5;
+
+                        await updateDoc(doc(db, "users", vendorId), {
+                            rating: Number(vendorRating.toFixed(1)),
+                            ratingCount: totalReviews
+                        });
+                    }
+                }
+            }
 
             setReviewModalOpen(false);
-            // No need to fetch registered workshops manually, if workshop update triggers something (though ratings won't show here unless we listen to workshop too).
-            // For now, valid enough.
+            showModal("Success", existingReview ? "Review updated!" : "Thanks for your feedback!", "success");
         } catch (error) {
             console.error("Review failed", error);
-            alert("Could not submit review.");
+            showModal("Review Failed", "We couldn't post your review right now. Please try again later.", "error");
         }
     };
 
     const openReviewModal = (ws: RegisteredWorkshop) => {
+        const existing = userReviews[ws.id];
         setSelectedWorkshopForReview(ws);
-        setReviewRating(5);
-        setReviewComment("");
+        setReviewRating(existing ? existing.rating : 5);
+        setReviewComment(existing ? existing.comment : "");
         setReviewModalOpen(true);
     };
 
@@ -353,17 +460,17 @@ function ProfileContent() {
     const submitRefundRequest = async () => {
         if (!selectedRegistrationForRefund) return;
         if (!refundReason.trim()) {
-            alert("Please provide a reason for the refund.");
+            showModal("Reason Required", "Please let us know why you're requesting a refund so we can process it correctly.", "warning");
             return;
         }
 
         try {
             await requestRefund(selectedRegistrationForRefund, refundReason);
-            alert("Refund request submitted successfully!");
+            showModal("Refund Requested", "Your request is in the pipeline! We'll notify you as soon as the vendor reviews it.", "success");
             setRefundModalOpen(false);
         } catch (error) {
             console.error("Refund request failed", error);
-            alert(error instanceof Error ? error.message : "Request failed");
+            showModal("Request Error", error instanceof Error ? error.message : "We couldn't process your refund request. Please try again later.", "error");
         }
     };
 
@@ -387,18 +494,22 @@ function ProfileContent() {
             await reportVendor(
                 selectedRegistrationForReport.registrationId,
                 selectedRegistrationForReport.id,
+                selectedRegistrationForReport.title,
+                selectedRegistrationForReport.price || 0,
                 selectedRegistrationForReport.vendorId,
                 user.uid,
-                userData?.displayName || "User",
+                selectedRegistrationForReport.participantName || userData?.displayName || "User",
+                selectedRegistrationForReport.participantEmail || user.email || "No Email",
+                selectedRegistrationForReport.participantPhone || userData?.phoneNumber || "No Phone",
                 reportReason,
                 reportDetails
             );
 
-            alert("Report submitted. Support will review it shortly.");
+            showModal("Report Submitted", "Thank you for looking out for the community. Our support team will review this shortly.", "success");
             setReportModalOpen(false);
         } catch (error) {
             console.error(error);
-            alert("Failed to submit report.");
+            showModal("Submission Error", "We couldn't submit your report. Please try again.", "error");
         }
     };
 
@@ -486,7 +597,7 @@ function ProfileContent() {
                         <TabButton
                             active={activeTab === 'registrations'}
                             onClick={() => setActiveTab('registrations')}
-                            label="My Learnings"
+                            label="My Registrations"
                             icon="fa-graduation-cap"
                         />
                         <TabButton
@@ -529,21 +640,19 @@ function ProfileContent() {
 
                                                     <div className="flex-1 relative z-10 flex flex-col h-full">
                                                         <div className="flex justify-between items-start mb-4">
-                                                            <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${ws.status === 'confirmed' ? 'bg-green-500/10 text-green-500' :
-                                                                ws.status === 'refunded' ? 'bg-green-500/10 text-green-500' : 'bg-amber-500/10 text-amber-500'
+                                                            <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${['confirmed', 'approved', 'paid'].includes(ws.status) ? 'bg-green-500/10 text-green-500' :
+                                                                ws.status === 'refunded' ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-500'
                                                                 }`}>
-                                                                {ws.status}
+                                                                {['confirmed', 'approved', 'paid'].includes(ws.status) ? 'PAID' : ws.status}
                                                             </span>
                                                             {ws.refundId && (
                                                                 <span className="text-[9px] font-mono text-muted-foreground border border-white/10 px-2 py-1 rounded bg-black/20">
                                                                     {ws.refundId}
                                                                 </span>
                                                             )}
-                                                            {ws.participantName && (
-                                                                <span className="text-[9px] font-black text-primary/60 uppercase tracking-widest flex items-center gap-1">
-                                                                    <i className="fa-solid fa-user-tag"></i> {ws.participantName}
-                                                                </span>
-                                                            )}
+                                                            <span className="text-[9px] font-black text-primary/60 uppercase tracking-widest flex items-center gap-1">
+                                                                <i className="fa-solid fa-user-tie"></i> {ws.vendorName}
+                                                            </span>
                                                         </div>
                                                         <h3 className="text-xl font-bold text-white mb-1 line-clamp-1">{ws.title}</h3>
                                                         <p className="text-xs text-muted-foreground mb-6 flex items-center gap-2">
@@ -554,19 +663,25 @@ function ProfileContent() {
                                                             {ws.status !== 'refunded' && ws.status !== 'refund_requested' && (
                                                                 <button
                                                                     onClick={() => openReviewModal(ws)}
-                                                                    className="px-4 py-2 bg-white text-black text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-primary/20 transition-colors"
+                                                                    className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${userReviews[ws.id] ? 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20' : 'bg-white text-black hover:bg-white/80 shadow-lg shadow-white/10'}`}
                                                                 >
-                                                                    Write Review
+                                                                    {userReviews[ws.id] ? 'Edit Review' : 'Write Review'}
                                                                 </button>
                                                             )}
 
                                                             {ws.status === 'confirmed' && (
-                                                                <button
-                                                                    onClick={() => openRefundModal(ws.registrationId)}
-                                                                    className="px-4 py-2 bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
-                                                                >
-                                                                    Request Refund
-                                                                </button>
+                                                                (ws.refundUntil && new Date(ws.refundUntil) < new Date()) ? (
+                                                                    <span className="px-4 py-2 bg-gray-500/10 text-gray-500 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-gray-500/20 cursor-not-allowed" title="Refund period has ended">
+                                                                        Refund Expired
+                                                                    </span>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => openRefundModal(ws.registrationId)}
+                                                                        className="px-4 py-2 bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
+                                                                    >
+                                                                        Request Refund
+                                                                    </button>
+                                                                )
                                                             )}
                                                             {ws.status === 'refund_requested' && (
                                                                 <div className="flex gap-2 items-center">
@@ -589,12 +704,19 @@ function ProfileContent() {
                                                                 </div>
                                                             )}
                                                             {(ws.status === 'rejected' || ws.status === 'refund_rejected') && (
-                                                                <button
-                                                                    onClick={() => openReportModal(ws)}
-                                                                    className="px-4 py-2 bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-red-500/20 hover:bg-red-500/20 transition-colors"
-                                                                >
-                                                                    <i className="fa-solid fa-triangle-exclamation"></i> Report Issue
-                                                                </button>
+                                                                <div className="flex flex-col gap-2 items-end">
+                                                                    {ws.rejectionReason && (
+                                                                        <span className="text-[9px] text-red-400 italic font-medium px-2 max-w-[150px] text-right">
+                                                                            &quot;{ws.rejectionReason}&quot;
+                                                                        </span>
+                                                                    )}
+                                                                    <button
+                                                                        onClick={() => openReportModal(ws)}
+                                                                        className="px-4 py-2 bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                                                                    >
+                                                                        <i className="fa-solid fa-triangle-exclamation"></i> Report Issue
+                                                                    </button>
+                                                                </div>
                                                             )}
                                                             {ws.whatsappLink && ws.status !== 'refunded' && (
                                                                 <a href={ws.whatsappLink} target="_blank" className="px-4 py-2 bg-[#25D366]/10 text-[#25D366] text-[10px] font-bold uppercase tracking-widest rounded-lg border border-[#25D366]/20 hover:bg-[#25D366]/20 transition-colors">
@@ -607,7 +729,8 @@ function ProfileContent() {
                                             );
                                         })}
                                     </motion.div>
-                                )}
+                                )
+                                }
 
                                 {activeTab === 'favorites' && (
                                     <motion.div
@@ -619,7 +742,7 @@ function ProfileContent() {
                                             <EmptyState icon="fa-heart-crack" title="No favorites saved" sub="Find something you love." link="/workshops" linkText="Explore Vibe" />
                                         ) : favorites.map(ws => (
                                             <Link href={`/register/${ws.id}`} key={ws.id} className="group relative aspect-[4/5] rounded-3xl overflow-hidden bg-background/50 border border-white/5">
-                                                <Image src={ws.imageUrl || "https://images.unsplash.com/photo-1513364776144-60967b0f800f"} alt={ws.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
+                                                <Image src={getWorkshopImage(ws)} alt={ws.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
                                                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
                                                 <div className="absolute bottom-0 left-0 p-5">
                                                     <span className="text-[9px] font-black text-primary uppercase tracking-widest mb-1 block">{ws.category}</span>
@@ -794,6 +917,15 @@ function ProfileContent() {
                 )}
             </AnimatePresence>
 
+            <PremiumModal
+                isOpen={modalConfig.isOpen}
+                onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+                title={modalConfig.title}
+                message={modalConfig.message}
+                type={modalConfig.type}
+                actionLabel={modalConfig.actionLabel}
+                onAction={modalConfig.onAction}
+            />
         </div >
     );
 }

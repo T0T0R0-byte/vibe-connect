@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { Firestore, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
@@ -12,19 +12,22 @@ export const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-
-
-
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+// Initialize Firestore based on environment
+// Server-side (SSR/Prerendering) uses standard Firestore
+// Client-side uses Persistent Cache for local DB speed
+let db: Firestore;
+if (typeof window !== "undefined") {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  });
+} else {
+  db = getFirestore(app);
+}
 
-// Initialize Firestore with robust local caching (Offline Persistence)
-// This effectively creates a "local database" that syncs with the cloud.
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager() // Handles multi-tab support seamlessly
-  })
-});
+export { db };
 export const storage = getStorage(app);
 export const auth = getAuth(app);

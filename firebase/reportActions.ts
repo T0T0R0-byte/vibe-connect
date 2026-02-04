@@ -6,9 +6,13 @@ import { Report } from "@/app/models/Report";
 export const reportVendor = async (
     registrationId: string,
     workshopId: string,
+    workshopTitle: string,
+    purchasePrice: number,
     vendorId: string,
     reporterId: string,
     reporterName: string,
+    reporterEmail: string,
+    reporterPhone: string,
     reason: string,
     details: string
 ) => {
@@ -16,9 +20,13 @@ export const reportVendor = async (
         const reportData: Omit<Report, 'id'> = {
             registrationId,
             workshopId,
+            workshopTitle,
+            purchasePrice,
             vendorId,
             reporterId,
             reporterName,
+            reporterEmail,
+            reporterPhone,
             reason,
             details,
             status: 'pending',

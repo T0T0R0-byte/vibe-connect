@@ -200,6 +200,16 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ participants }) => {
                                                     </div>
                                                     <div className="flex flex-col">
                                                         <span className="text-xs font-bold text-foreground">{p.displayName}</span>
+                                                        <p className="text-[10px] text-muted-foreground font-medium flex items-center gap-2">
+                                                            <span><i className="fa-solid fa-phone scale-75 opacity-70"></i> {p.phoneNumber || "No Phone"}</span>
+                                                            <span className="opacity-30">•</span>
+                                                            <span><i className="fa-solid fa-envelope scale-75 opacity-70"></i> {p.email}</span>
+                                                        </p>
+                                                        {p.consentUrl && (
+                                                            <a href={p.consentUrl} target="_blank" className="text-[9px] font-bold text-primary hover:underline mt-1 flex items-center gap-1">
+                                                                <i className="fa-solid fa-file-contract"></i> View Consent
+                                                            </a>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </td>
@@ -280,6 +290,16 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ participants }) => {
                                                     </div>
                                                     <div className="flex flex-col">
                                                         <span className="text-xs font-bold text-muted-foreground">{p.displayName}</span>
+                                                        <p className="text-[10px] text-muted-foreground/50 font-medium flex items-center gap-2">
+                                                            <span><i className="fa-solid fa-phone scale-75 opacity-70"></i> {p.phoneNumber || "N/A"}</span>
+                                                            <span className="opacity-30">•</span>
+                                                            <span><i className="fa-solid fa-envelope scale-75 opacity-70"></i> {p.email}</span>
+                                                        </p>
+                                                        {p.consentUrl && (
+                                                            <a href={p.consentUrl} target="_blank" className="text-[9px] font-bold text-primary/60 hover:text-primary hover:underline mt-1 flex items-center gap-1">
+                                                                <i className="fa-solid fa-file-contract"></i> View Consent
+                                                            </a>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </td>

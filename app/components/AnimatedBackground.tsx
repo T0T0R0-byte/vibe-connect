@@ -16,7 +16,9 @@ export const AnimatedBackground = () => {
     const [particles, setParticles] = useState<Particle[]>([]);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setMounted(true);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setParticles(Array.from({ length: 6 }).map(() => ({
             x: Math.random() * 1000 - 500,
             y: Math.random() * 1000 - 500,

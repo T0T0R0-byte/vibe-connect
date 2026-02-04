@@ -114,17 +114,20 @@ export const createWorkshop = async (vendorId: string, data: WorkshopData) => {
 
 // GET ALL WORKSHOPS FOR A VENDOR
 export const getVendorWorkshops = async (vendorId: string) => {
+  const { sanitizeData } = await import("@/app/utils/serialize");
   const q = query(collection(db, "workshops"), where("vendorId", "==", vendorId));
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  return querySnapshot.docs.map((doc) => sanitizeData({ id: doc.id, ...doc.data() }));
 };
 
 // GET ALL WORKSHOPS (For Homepage)
 export const getAllWorkshops = async () => {
+  const { sanitizeData } = await import("@/app/utils/serialize");
   const q = query(collection(db, "workshops"));
   const querySnapshot = await getDocs(q);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as any));
+  return querySnapshot.docs.map((doc) => {
+    return sanitizeData({ id: doc.id, ...doc.data() });
+  });
 };
 
 // UPDATE WORKSHOP
@@ -206,6 +209,8 @@ const uploadWithTimeout = async (fileRef: StorageReference, file: File): Promise
 export const registerForWorkshop = async (
   workshopId: string,
   userId: string,
+  userEmail: string,
+  vendorId: string,
   paymentIntentId: string | null,
   participants: {
     fullName: string;
@@ -213,6 +218,7 @@ export const registerForWorkshop = async (
     phone: string;
     address: string;
     consentFile?: File | null;
+    consentUrl?: string;
   }[]
 ) => {
 
@@ -222,7 +228,10 @@ export const registerForWorkshop = async (
   const batchPromises = participants.map(async (participant) => {
     let consentUrl = "";
 
-    if (participant.consentFile) {
+    // Priority: Use pre-uploaded digital consent URL if available
+    if (participant.consentUrl) {
+      consentUrl = participant.consentUrl;
+    } else if (participant.consentFile) {
       const fName = participant.consentFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
       const consentRef = ref(storage, `consents/${workshopId}/${userId}-${Date.now()}-${fName}`);
       consentUrl = await uploadWithTimeout(consentRef, participant.consentFile);
@@ -233,6 +242,8 @@ export const registerForWorkshop = async (
     await addDoc(collection(db, "registrations"), {
       workshopId,
       userId,
+      userEmail,
+      vendorId,
       groupId,
       paymentIntentId,
       status: "confirmed",

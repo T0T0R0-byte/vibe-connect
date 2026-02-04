@@ -10,6 +10,8 @@ interface Report {
     workshopId: string;
     reporterId: string;
     reporterName: string;
+    reporterEmail?: string;
+    reporterPhone?: string;
     reason: string;
     details: string;
     status: 'pending' | 'resolved' | 'dismissed';
@@ -98,15 +100,30 @@ export const ReportsView: React.FC = () => {
                                 <div className="flex items-start justify-between">
                                     <div>
                                         <div className={`inline-flex items-center px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest mb-2 border ${report.status === 'pending' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                                                report.status === 'resolved' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
-                                                    'bg-slate-500/10 text-slate-500 border-slate-500/20'
+                                            report.status === 'resolved' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                                                'bg-slate-500/10 text-slate-500 border-slate-500/20'
                                             }`}>
                                             {report.status}
                                         </div>
                                         <h3 className="text-lg font-bold text-white mb-1">{report.reason}</h3>
-                                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-2">
-                                            <i className="fa-solid fa-user"></i> {report.reporterName} • {new Date(report.createdAt).toLocaleDateString()}
-                                        </p>
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-2">
+                                                <i className="fa-solid fa-user text-primary/70"></i> {report.reporterName}
+                                            </p>
+                                            {report.reporterEmail && (
+                                                <p className="text-[10px] text-muted-foreground flex items-center gap-2">
+                                                    <i className="fa-solid fa-envelope opacity-50"></i> {report.reporterEmail}
+                                                </p>
+                                            )}
+                                            {report.reporterPhone && (
+                                                <p className="text-[10px] text-primary font-bold flex items-center gap-2">
+                                                    <i className="fa-solid fa-phone"></i> {report.reporterPhone}
+                                                </p>
+                                            )}
+                                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest ml-auto opacity-40">
+                                                {new Date(report.createdAt).toLocaleDateString()}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
 

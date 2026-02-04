@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Firebase
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, getDoc, doc, updateDoc, increment, deleteDoc } from "firebase/firestore";
 import { db } from "@/firebase/firebaseConfig";
+import { sanitizeData } from "@/app/utils/serialize";
 
 // Models
 import { Workshop } from "../models/Workshop";
@@ -23,6 +24,8 @@ import { WorkshopsView } from "../components/views/VendorDashboard/WorkshopsView
 import { ParticipantsView } from "../components/views/VendorDashboard/ParticipantsView";
 import { RefundsView } from "../components/views/VendorDashboard/RefundsView";
 import { CustomizationView } from "../components/views/VendorDashboard/CustomizationView";
+import { ReviewsView } from "../components/views/VendorDashboard/ReviewsView";
+import { CustomRequestsView } from "../components/views/VendorDashboard/CustomRequestsView";
 import { ReportsView } from "../components/views/VendorDashboard/ReportsView";
 
 
@@ -37,7 +40,7 @@ const VendorDashboard: React.FC = () => {
   const [allParticipants, setAllParticipants] = useState<Participant[]>([]);
 
   // UI State
-  const [activeTab, setActiveTab] = useState<"overview" | "workshops" | "analytics" | "participants" | "refunds" | "customOrders" | "reports" | "profile">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "workshops" | "analytics" | "participants" | "refunds" | "customOrders" | "reports" | "profile" | "reviews" | "requests">("overview");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Workshop Management State
@@ -56,6 +59,9 @@ const VendorDashboard: React.FC = () => {
   const [capacity, setCapacity] = useState(0);
   const [ageGroup, setAgeGroup] = useState("All Ages");
   const [consentRequired, setConsentRequired] = useState(false);
+  const [fullDetails, setFullDetails] = useState("");
+  const [refundUntil, setRefundUntil] = useState("");
+
 
 
   const [participantSearch, setParticipantSearch] = useState("");
@@ -66,14 +72,14 @@ const VendorDashboard: React.FC = () => {
   useEffect(() => {
     if (authLoading || !user || userData?.role !== "vendor") return;
 
-    setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
+    setLoading(true);
 
     // 1. Listen to Vendor's Workshops
     const q = query(collection(db, "workshops"), where("vendorId", "==", user.uid));
 
     // Main Listener
     const unsubscribeWorkshops = onSnapshot(q, (snapshot) => {
-      const wsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Workshop));
+      const wsData = snapshot.docs.map(doc => sanitizeData({ id: doc.id, ...doc.data() }) as Workshop);
       setWorkshops(wsData);
       setLoading(false);
 
@@ -81,50 +87,51 @@ const VendorDashboard: React.FC = () => {
       if (wsData.length > 0) {
         const workshopIds = wsData.map(w => w.id);
 
-        // Note: Firestore 'in' query supports max 10 values. For safety, we might need multiple listeners or just listen to all registrations and filter (client-side) if scale is small.
-        // Given the scale, client-side filtering from a broader query or multiple queries is safer for now if > 10 workshops.
-        // Or, ideally, we should have a 'vendorId' on the registration document.
-        // For now, let's query ALL registrations for simplicity in this context (assuming < 1000s active), 
-        // OR better: if possible, query by workshopIds in batches. 
-        // Let's use a simpler approach: Listener on collection(registrations) and filter in memory. 
-        // This ensures *instant* updates without complex query chains for this MVP size.
-
-        const regQuery = query(collection(db, "registrations"));
-        // Ideally: where('workshopId', 'in', workshopIds) -- but limits apply.
+        // Optimized: Query registrations more efficiently
+        // If we have <= 10 workshops, use 'in' query, otherwise listen to all and filter client-side
+        let regQuery;
+        if (workshopIds.length <= 10) {
+          regQuery = query(
+            collection(db, "registrations"),
+            where("workshopId", "in", workshopIds)
+          );
+        } else {
+          // For vendors with many workshops, listen to all and filter
+          regQuery = query(collection(db, "registrations"));
+        }
 
         const unsubscribeRegs = onSnapshot(regQuery, (regSnap) => {
-          const allRegs = regSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-          // Filter client-side for vendor's workshops
-          const vendorRegs = allRegs.filter((r: any) => workshopIds.includes(r.workshopId)); // eslint-disable-line @typescript-eslint/no-explicit-any
-
           const pMap: Record<string, Participant[]> = {};
           const allPart: Participant[] = [];
 
-          // Process registrations into Participants
-          vendorRegs.forEach((reg: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+          const currentWorkshopIds = wsData.map(w => w.id);
+
+          regSnap.docs.forEach((d) => {
+            const reg = sanitizeData({ id: d.id, ...d.data() });
+
+            // Filter client-side if we're listening to all registrations
+            if (!currentWorkshopIds.includes(reg.workshopId)) return;
+
             const ws = wsData.find(w => w.id === reg.workshopId);
             if (ws) {
               const participant: Participant = {
                 registrationId: reg.id,
                 uid: reg.userId,
+                createdAt: reg.createdAt,
                 displayName: reg.participantDetails?.fullName || "Unknown",
-                email: "Processing...", // Ideally we need to fetch user email separately or store it in reg.
-                // Since we don't store email in registration (checked createWorkshop), we might miss it.
-                // However, previous code fetched it via `getParticipantsForWorkshop` which did a user lookup.
-                // To keep real-time fast, we will use what's in registration or fetch async. 
-                // Let's rely on registration details if possible, or trigger async user fetch.
+                email: reg.participantDetails?.email || reg.userEmail || reg.email || "N/A",
                 phoneNumber: reg.participantDetails?.phone,
+                address: reg.participantDetails?.address,
+                consentUrl: reg.participantDetails?.consentUrl || reg.consentUrl,
                 status: reg.status,
+                refundReason: reg.refundReason,
+                refundId: reg.refundId,
+                rejectionReason: reg.rejectionReason,
                 workshopId: ws.id,
                 workshopTitle: ws.title,
                 workshopPrice: ws.price,
                 details: reg.participantDetails
               };
-
-              // Backward compatibility: If email not in details, we might leave it blank or fetch.
-              // Previous logic: ParticipantController.getParticipantsForWorkshop checks 'users' collection.
-              // We will do a quick async fetch for emails if needed, but for now let's map what we have.
 
               if (!pMap[ws.id]) pMap[ws.id] = [];
               pMap[ws.id].push(participant);
@@ -145,7 +152,7 @@ const VendorDashboard: React.FC = () => {
 
     return () => unsubscribeWorkshops();
 
-  }, [user, userData, authLoading, router]);
+  }, [user, userData, authLoading]);
 
 
 
@@ -153,13 +160,33 @@ const VendorDashboard: React.FC = () => {
   const handleCreate = async () => {
     if (!user) return;
     try {
-      await WorkshopController.createWorkshop(user.uid, {
-        title, description, category, date, whatsappLink, location, capacity, ageGroup, consentRequired,
-        imageUrl: directImageUrl // Pass direct URL
-      }, images);
+      if (selectedWorkshop) {
+        await WorkshopController.updateWorkshop(selectedWorkshop.id, {
+          title, description, category, date, whatsappLink, location, capacity, ageGroup, consentRequired, fullDetails,
+          imageUrl: directImageUrl, refundUntil: refundUntil || undefined
+        }, images);
+      } else {
+        await WorkshopController.createWorkshop(user.uid, {
+          title, description, category, date, whatsappLink, location, capacity, ageGroup, consentRequired, fullDetails,
+          imageUrl: directImageUrl, refundUntil: refundUntil || undefined
+        }, images);
+      }
       setIsCreateOpen(false);
       resetForm();
-    } catch (e) { alert("Failed to create workshop"); }
+    } catch (e) { alert("Failed to save workshop"); }
+  };
+
+  const handleToggleFreeze = async (workshop: Workshop) => {
+    if (!confirm(`Are you sure you want to ${workshop.isFrozen ? 'unfreeze' : 'freeze'} this workshop? \n\n${workshop.isFrozen ? 'Registrations will be enabled again.' : 'No new registrations will be allowed.'}`)) return;
+
+    try {
+      await WorkshopController.updateWorkshop(workshop.id, { isFrozen: !workshop.isFrozen });
+      // Optimistic update
+      setWorkshops(p => p.map(w => w.id === workshop.id ? { ...w, isFrozen: !workshop.isFrozen } : w));
+    } catch (e) {
+      console.error(e);
+      alert("Failed to update status");
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -170,12 +197,31 @@ const VendorDashboard: React.FC = () => {
 
   const handleParticipantStatus = async (regId: string, status: string) => {
     await ParticipantController.updateStatus(regId, status);
+  };
 
+  const handleRemoveParticipant = async (regId: string) => {
+    if (confirm("Permanently remove this participant from the workspace? This cannot be undone and will not issue a refund.")) {
+      try {
+        const regSnap = await getDoc(doc(db, "registrations", regId));
+        if (regSnap.exists()) {
+          const workshopId = regSnap.data().workshopId;
+          // Restore capacity
+          await updateDoc(doc(db, "workshops", workshopId), {
+            capacity: increment(1)
+          });
+          await deleteDoc(doc(db, "registrations", regId));
+          alert("Participant removed successfully.");
+        }
+      } catch (e) {
+        alert("Failed to remove participant.");
+      }
+    }
   };
 
   const resetForm = () => {
     setTitle(""); setDescription(""); setCategory("Art"); setDate(""); setWhatsappLink(""); setImages([]);
-    setDirectImageUrl("");
+    setDirectImageUrl(""); setFullDetails(""); setLocation("Online"); setCapacity(0); setAgeGroup("All Ages");
+    setConsentRequired(false); setSelectedWorkshop(null); setRefundUntil("");
   };
 
   // Render Loading
@@ -194,6 +240,8 @@ const VendorDashboard: React.FC = () => {
             { id: 'overview', icon: 'fa-grid-2', label: 'Overview' },
             { id: 'workshops', icon: 'fa-layer-group', label: 'My Workshops' },
             { id: 'participants', icon: 'fa-users', label: 'Participants' },
+            { id: 'reviews', icon: 'fa-star', label: 'Reviews', color: 'text-amber-500' },
+            { id: 'requests', icon: 'fa-wand-magic-sparkles', label: 'Custom Requests', color: 'text-purple-400' },
             { id: 'refunds', icon: 'fa-money-bill-transfer', label: 'Refunds', color: 'text-orange-500' },
             { id: 'reports', icon: 'fa-triangle-exclamation', label: 'Reports', color: 'text-red-500' },
 
@@ -211,7 +259,7 @@ const VendorDashboard: React.FC = () => {
             onClick={() => setActiveTab('customOrders')}
             className={`sidebar-item w-full ${activeTab === 'customOrders' ? 'active' : ''}`}
           >
-            <i className="fa-solid fa-wand-magic-sparkles text-purple-400"></i> Customization
+            <i className="fa-solid fa-gear text-slate-400"></i> Settings
           </button>
         </nav>
         <div className="pt-6 border-t border-white/5 relative group">
@@ -262,8 +310,22 @@ const VendorDashboard: React.FC = () => {
               userData={userData}
               workshops={workshops}
               participants={allParticipants}
-              totalRevenue={0}
+              totalRevenue={allParticipants.reduce((acc, p) => {
+                // Revenue Logic: Include pending refunds. Only subtract when actually refunded.
+                if (['paid', 'approved', 'confirmed', 'refund_requested', 'refund_rejected'].includes(p.status || '')) {
+                  return acc + (p.workshopPrice || 0);
+                }
+                return acc;
+              }, 0)}
               participantsMap={participantsMap}
+              onCreate={() => {
+                if (!userData?.isVerified) {
+                  alert("Restricted Access: You must verify your Business ID with an administrator before creating workshops.");
+                  return;
+                }
+                resetForm();
+                setIsCreateOpen(true);
+              }}
             />
           )}
 
@@ -272,9 +334,33 @@ const VendorDashboard: React.FC = () => {
               key="workshops"
               workshops={workshops}
               participantsMap={participantsMap}
-              onCreate={() => { resetForm(); setIsCreateOpen(true); }}
-              onEdit={(ws) => { setSelectedWorkshop(ws); setIsCreateOpen(true); }}
+              onCreate={() => {
+                if (!userData?.isVerified) {
+                  alert("Restricted Access: You must verify your Business ID with an administrator before creating workshops.");
+                  return;
+                }
+                resetForm();
+                setIsCreateOpen(true);
+              }}
+              onEdit={(ws) => {
+                setSelectedWorkshop(ws);
+                setTitle(ws.title);
+                setDescription(ws.description);
+                setCategory(ws.category);
+                setDate(ws.date);
+                setWhatsappLink(ws.whatsappLink || "");
+                setLocation(ws.location || "Online");
+                setCapacity(ws.capacity || 0);
+                setAgeGroup(ws.ageGroup || "All Ages");
+                setFullDetails(ws.fullDetails || "");
+                setConsentRequired(ws.consentRequired || false);
+                setDirectImageUrl(ws.imageUrl || "");
+                setRefundUntil(ws.refundUntil || "");
+                setIsCreateOpen(true);
+              }}
               onDelete={handleDelete}
+              onRemoveParticipant={handleRemoveParticipant}
+              onToggleFreeze={handleToggleFreeze}
             />
           )}
 
@@ -293,7 +379,16 @@ const VendorDashboard: React.FC = () => {
 
                 }
               }}
+              onRemoveParticipant={handleRemoveParticipant}
             />
+          )}
+
+          {activeTab === 'requests' && user && (
+            <CustomRequestsView key="requests" vendorId={user.uid} />
+          )}
+
+          {activeTab === 'reviews' && (
+            <ReviewsView key="reviews" participants={allParticipants} />
           )}
 
           {activeTab === 'refunds' && (
@@ -393,12 +488,22 @@ const VendorDashboard: React.FC = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Description</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Short Description</label>
                       <textarea
-                        placeholder="Describe the experience in detail..."
+                        placeholder="Brief overview (appears on cards)..."
                         value={description}
                         onChange={e => setDescription(e.target.value)}
-                        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-medium text-white outline-none focus:border-primary/50 transition-all min-h-[120px] placeholder:text-muted-foreground/20 resize-none"
+                        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-medium text-white outline-none focus:border-primary/50 transition-all min-h-[80px] placeholder:text-muted-foreground/20 resize-none"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Full Experience Details</label>
+                      <textarea
+                        placeholder="Explain exactly what participants will do, learn, and experience in detail..."
+                        value={fullDetails}
+                        onChange={e => setFullDetails(e.target.value)}
+                        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-medium text-white outline-none focus:border-primary/50 transition-all min-h-[160px] placeholder:text-muted-foreground/20 resize-none"
                       />
                     </div>
                   </div>
@@ -429,8 +534,16 @@ const VendorDashboard: React.FC = () => {
                         <input
                           type="date"
                           value={date}
-                          onChange={e => setDate(e.target.value)}
                           className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-indigo-400/50 transition-all uppercase tracking-widest"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Refund Policy Limit</label>
+                        <input
+                          type="date"
+                          value={refundUntil}
+                          onChange={e => setRefundUntil(e.target.value)}
+                          className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-amber-500 outline-none focus:border-amber-500/50 transition-all uppercase tracking-widest"
                         />
                       </div>
                       <div className="space-y-2">

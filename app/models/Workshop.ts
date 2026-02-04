@@ -16,4 +16,7 @@ export interface Workshop {
     rating?: number;
     ratingCount?: number;
     price?: number;
+    fullDetails?: string;
+    isFrozen?: boolean;
+    refundUntil?: string;
 }
