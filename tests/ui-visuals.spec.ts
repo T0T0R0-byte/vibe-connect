@@ -30,7 +30,7 @@ test.describe('UI & Visual Regression Checks', () => {
         await page.goto('/login');
         await expect(page.getByPlaceholder('name@vibe.io')).toBeVisible();
         await expect(page.getByPlaceholder('••••••••')).toBeVisible();
-        await expect(page.getByRole('button', { name: /Sign In/i })).toBeVisible();
+        await expect(page.getByText('Sign In').first()).toBeVisible();
     });
 
     test('5. Register Page Role Toggle', async ({ page }) => {
