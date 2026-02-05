@@ -4,8 +4,8 @@ test.describe('UI & Visual Regression Checks', () => {
 
     test('1. Homepage Hero Section is visible', async ({ page }) => {
         await page.goto('/');
-        await expect(page.getByText('VIBE')).toBeVisible();
-        await expect(page.getByText('CONNECT.')).toBeVisible();
+        await expect(page.locator('h1')).toContainText('VIBE');
+        await expect(page.locator('h1')).toContainText('CONNECT.');
         await expect(page.getByRole('link', { name: 'Explore Experiences' })).toBeVisible();
     });
 
@@ -48,7 +48,7 @@ test.describe('UI & Visual Regression Checks', () => {
         // Check for common filter headers like "Category", "Price", "Rating"
         // If sidebar is hidden on mobile, this might flake, but default viewport is desktop-ish.
         // We'll check for the page title or search bar presence which we know exists.
-        await expect(page.getByPlaceholder(/Search/i)).toBeVisible();
+        await expect(page.getByPlaceholder('What are you looking to master today?')).toBeVisible();
     });
 
     test('7. FAQ Page Loads', async ({ page }) => {

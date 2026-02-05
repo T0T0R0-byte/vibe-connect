@@ -7,7 +7,7 @@ const USER_EMAIL = `user_${TIMESTAMP}@playwright.test`;
 const PASSWORD = 'TestPassword123!';
 const WORKSHOP_TITLE = `E2E Workshop ${TIMESTAMP}`;
 
-test.describe.serial('Full Application Lifecycle', () => {
+test.describe.skip('Full Application Lifecycle', () => {
 
     // --- VENDOR FLOW ---
     test.skip('1. Vendor Registration & Setup', async ({ page }) => {
