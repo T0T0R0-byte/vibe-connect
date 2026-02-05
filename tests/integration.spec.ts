@@ -6,12 +6,11 @@ test.describe('Integration: Search & Filtering', () => {
     });
 
     test('Homepage loads basic components', async ({ page }) => {
-        await expect(page.locator('text=Connect. Create. Vibe.')).toBeVisible();
+        await expect(page.getByText('The Ultimate Workshop Hub')).toBeVisible();
     });
 
     test('Search bar filters workshops', async ({ page }) => {
-        // Assuming there is a Workshop on the home page or workshops page
-        // This test assumes at least one workshop exists or the empty state is handled gracefully
+        await page.goto('/workshops');
         const searchInput = page.locator('input[placeholder*="Search"]');
 
         // Use a term likely to exist or likely to NOT exist
