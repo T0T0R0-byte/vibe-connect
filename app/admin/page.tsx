@@ -164,8 +164,10 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         if (authLoading) return;
-        if (!user) { router.push("/login"); return; }
-        if (userData?.role !== 'admin') { router.push('/'); return; }
+        if (!user || (userData && userData.role !== 'admin')) {
+            router.push("/login?redirect=/admin");
+            return;
+        }
         fetchOverviewStats();
     }, [user, userData, authLoading, router]);
 

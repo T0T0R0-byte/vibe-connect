@@ -164,7 +164,7 @@ function ProfileContent() {
 
     useEffect(() => {
         if (!loading && !user) {
-            router.push("/login");
+            router.push("/login?redirect=/profile");
         } else if (userData) {
             setName(userData.displayName || "");
             setPhone(userData.phoneNumber || "");

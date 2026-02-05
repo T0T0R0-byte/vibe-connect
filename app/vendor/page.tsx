@@ -70,7 +70,11 @@ const VendorDashboard: React.FC = () => {
 
   // Real-time Data Listeners
   useEffect(() => {
-    if (authLoading || !user || userData?.role !== "vendor") return;
+    if (authLoading) return;
+    if (!user || (userData && userData.role !== "vendor")) {
+      router.push("/login?redirect=/vendor");
+      return;
+    }
 
     setLoading(true);
 
