@@ -67,4 +67,26 @@ test.describe('UI & Visual Regression Checks', () => {
         // Should redirect to login
         await expect(page).toHaveURL(/login/);
     });
+
+    test('9. 404 Page handles non-existent routes', async ({ page }) => {
+        await page.goto('/non-existent-page-12345');
+        // Next.js default 404 usually contains "404" or "Page Not Found"
+        await expect(page.locator('body')).toContainText(/404|Not Found/i);
+    });
+
+    test('10. Footer Slogan Visibility', async ({ page }) => {
+        await page.goto('/');
+        await expect(page.getByText('Empowering creators and learners')).toBeVisible();
+    });
+
+    test('11. Terms of Service Link', async ({ page }) => {
+        await page.goto('/');
+        // Verify link exists even if page content isn't fully implemented
+        await expect(page.getByRole('link', { name: 'Terms of Service' })).toBeVisible();
+    });
+
+    test('12. Privacy Policy/Help Center Link', async ({ page }) => {
+        await page.goto('/');
+        await expect(page.getByRole('link', { name: 'Help Center' })).toBeVisible();
+    });
 });

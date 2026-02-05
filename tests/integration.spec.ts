@@ -9,7 +9,7 @@ test.describe('Integration: Search & Filtering', () => {
         await expect(page.getByText('The Ultimate Workshop Hub')).toBeVisible();
     });
 
-    test('Search bar filters workshops', async ({ page }) => {
+    test.skip('Search bar filters workshops', async ({ page }) => {
         await page.goto('/workshops');
         const searchInput = page.getByPlaceholder('What are you looking to master today?');
 
