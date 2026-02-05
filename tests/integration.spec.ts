@@ -11,7 +11,7 @@ test.describe('Integration: Search & Filtering', () => {
 
     test('Search bar filters workshops', async ({ page }) => {
         await page.goto('/workshops');
-        const searchInput = page.locator('input[placeholder*="Search"]');
+        const searchInput = page.getByPlaceholder('What are you looking to master today?');
 
         // Use a term likely to exist or likely to NOT exist
         await searchInput.fill('NonExistentWorkshopTerm');
