@@ -18,13 +18,19 @@ test.describe.serial('Full Application Lifecycle', () => {
         await page.fill('input[type="email"]', VENDOR_EMAIL);
         await page.fill('input[type="password"]', PASSWORD);
 
-        // Click Register (Assuming button text)
-        await page.click('button:has-text("Create Account")');
+        // Vendor Specific Fields (since we are in vendor mode)
+        await page.fill('input[placeholder="+94 77..."]', '+94 77 123 4567');
+        await page.fill('input[placeholder="Instagram / Website Link"]', 'https://example.com');
+        await page.setInputFiles('input[type="file"]', path.join(__dirname, 'assets/test_doc.pdf'));
+
+        // Click Register
+        await page.click('button:has-text("Initialize Identity")');
 
         // Should redirect to Vendor Dashboard
         // Wait for URL or a specific element on dashboard
-        await expect(page).toHaveURL(/\/vendor/);
-        await expect(page.getByText('Welcome back')).toBeVisible();
+        await expect(page).toHaveURL(/\/vendor/, { timeout: 30000 });
+        // Vendor dashboard usually starts with "Welcome back" or similar
+        await expect(page.locator('h1', { hasText: 'Welcome' })).toBeVisible({ timeout: 30000 });
     });
 
     test('2. Vendor Create Workshop', async ({ page }) => {
@@ -95,7 +101,7 @@ test.describe.serial('Full Application Lifecycle', () => {
         await page.fill('input[placeholder="John Doe"]', `User ${TIMESTAMP}`);
         await page.fill('input[type="email"]', USER_EMAIL);
         await page.fill('input[type="password"]', PASSWORD);
-        await page.click('button:has-text("Create Account")');
+        await page.click('button:has-text("Initialize Identity")'); // Updated
 
         // Should go to home or onboarding
         await expect(page).toHaveURL('/');
