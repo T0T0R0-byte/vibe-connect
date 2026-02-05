@@ -21,6 +21,7 @@ import { ref, uploadBytes, getDownloadURL, StorageReference } from "firebase/sto
 interface WorkshopData {
   title: string;
   description: string;
+  fullDetails?: string; // Added
 
   date: string;
   category: string;
@@ -32,6 +33,7 @@ interface WorkshopData {
   ageGroup?: string;
   consentRequired?: boolean;
   price?: number;
+  refundUntil?: string; // Added
 }
 
 // CREATE WORKSHOP
@@ -94,6 +96,7 @@ export const createWorkshop = async (vendorId: string, data: WorkshopData) => {
     vendorId,
     title: data.title,
     description: data.description,
+    fullDetails: data.fullDetails || "", // Added
 
     category: data.category,
     date: data.date,
@@ -103,6 +106,7 @@ export const createWorkshop = async (vendorId: string, data: WorkshopData) => {
     ageGroup: data.ageGroup || "All Ages",
     consentRequired: data.consentRequired || false,
     price: data.price || 0,
+    refundUntil: data.refundUntil || "", // Added
 
     imageUrl, // Main image
     imageUrls, // All images (up to 3)
@@ -136,6 +140,7 @@ export const updateWorkshop = async (workshopId: string, data: Partial<WorkshopD
   const updateData: any = {
     title: data.title,
     description: data.description,
+    fullDetails: data.fullDetails, // Added
 
     category: data.category,
     date: data.date,
@@ -145,7 +150,7 @@ export const updateWorkshop = async (workshopId: string, data: Partial<WorkshopD
     ageGroup: data.ageGroup,
     consentRequired: data.consentRequired,
     price: data.price,
-
+    refundUntil: data.refundUntil, // Added
   };
 
   // Handle Image Updates
