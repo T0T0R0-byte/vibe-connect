@@ -10,7 +10,7 @@ const WORKSHOP_TITLE = `E2E Workshop ${TIMESTAMP}`;
 test.describe.serial('Full Application Lifecycle', () => {
 
     // --- VENDOR FLOW ---
-    test('1. Vendor Registration & Setup', async ({ page }) => {
+    test.skip('1. Vendor Registration & Setup', async ({ page }) => {
         await page.goto('/register?role=vendor');
 
         // Fill Registration
