@@ -48,11 +48,15 @@ export class WorkshopController {
             imageUrls = results.filter(url => url !== "");
         }
 
+        const primaryImageUrl = typeof data.imageUrl === 'string' && data.imageUrl.startsWith('http')
+            ? data.imageUrl
+            : (imageUrls[0] || "");
+
         const workshopData = {
             vendorId,
             ...data,
-            imageUrl: typeof data.imageUrl === 'string' && data.imageUrl.startsWith('http') ? data.imageUrl : (imageUrls[0] || ""),
-            imageUrls: imageUrls.length > 0 ? imageUrls : (data.imageUrls || []),
+            imageUrl: primaryImageUrl,
+            imageUrls: imageUrls.length > 0 ? imageUrls : (primaryImageUrl ? [primaryImageUrl] : (data.imageUrls || [])),
             createdAt: serverTimestamp(),
             rating: 0,
             ratingCount: 0,
@@ -85,6 +89,9 @@ export class WorkshopController {
                 updateData.imageUrls = validUrls;
                 updateData.imageUrl = validUrls[0];
             }
+        } else if (typeof data.imageUrl === 'string' && data.imageUrl.startsWith('http')) {
+            updateData.imageUrl = data.imageUrl;
+            updateData.imageUrls = [data.imageUrl];
         }
 
         Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
