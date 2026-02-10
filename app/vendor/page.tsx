@@ -306,6 +306,33 @@ const VendorDashboard: React.FC = () => {
           </div>
         </header>
 
+        {/* Verification Notice */}
+        {!userData?.isVerified && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500">
+                <i className="fa-solid fa-user-lock"></i>
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-amber-500 uppercase tracking-tight">Identity Pending Verification</h4>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                  Our team is reviewing your documentation. Creation features are currently restricted.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab('customOrders')}
+              className="px-4 py-2 bg-amber-500 text-black text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-amber-400 transition-all"
+            >
+              Update Documents
+            </button>
+          </motion.div>
+        )}
+
         {/* Views Switching */}
         <AnimatePresence mode="wait">
           {activeTab === 'overview' && userData && (
@@ -538,6 +565,7 @@ const VendorDashboard: React.FC = () => {
                         <input
                           type="date"
                           value={date}
+                          onChange={e => setDate(e.target.value)}
                           className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-indigo-400/50 transition-all uppercase tracking-widest"
                         />
                       </div>
@@ -609,7 +637,7 @@ const VendorDashboard: React.FC = () => {
                           onChange={e => setDirectImageUrl(e.target.value)}
                           className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-purple-500/50 transition-all placeholder:text-muted-foreground/20"
                         />
-                        <p className="text-[9px] text-muted-foreground ml-1">*Direct URL support coming in next update. Please utilize file upload for best results.*</p>
+                        <p className="text-[9px] text-muted-foreground ml-1">Enter a direct image link from Unsplash, Pexels, etc.</p>
                       </div>
                     </div>
                   </div>

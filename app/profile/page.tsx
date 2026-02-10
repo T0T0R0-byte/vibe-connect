@@ -248,38 +248,48 @@ function ProfileContent() {
         // 2. Listen for all registrations for this user
         const q = query(collection(db, "registrations"), where("userId", "==", user.uid));
 
+        const workshopCache = new Map<string, any>();
+        const vendorCache = new Map<string, any>();
+
         const unsubscribeRegs = onSnapshot(q, async (snapshot) => {
             const regs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-            // Optimization: Fetch all data concurrently
+            // Optimization: Fetch all data concurrently with caching
             const results = await Promise.all(regs.map(async (reg: any) => {
-                const wsDoc = await getDoc(doc(db, "workshops", reg.workshopId));
-                if (!wsDoc.exists()) return null;
+                let wsData = workshopCache.get(reg.workshopId);
+                if (!wsData) {
+                    const wsDoc = await getDoc(doc(db, "workshops", reg.workshopId));
+                    if (!wsDoc.exists()) return null;
+                    wsData = wsDoc.data();
+                    workshopCache.set(reg.workshopId, wsData);
+                }
 
-                const wsData = wsDoc.data() as Workshop;
-                let vendorName = "Unknown";
-                let vendorPhone = "";
-
-                if (wsData.vendorId) {
+                let vendorInfo = vendorCache.get(wsData.vendorId);
+                if (!vendorInfo && wsData.vendorId) {
                     const vDoc = await getDoc(doc(db, "users", wsData.vendorId));
                     if (vDoc.exists()) {
-                        vendorName = vDoc.data().businessName || vDoc.data().displayName || "Unknown Vendor";
-                        vendorPhone = vDoc.data().phoneNumber || "";
+                        const vData = vDoc.data();
+                        vendorInfo = {
+                            name: vData.businessName || vData.displayName || "Unknown Vendor",
+                            phone: vData.phoneNumber || ""
+                        };
+                        vendorCache.set(wsData.vendorId, vendorInfo);
+                    } else {
+                        vendorInfo = { name: "Unknown Vendor", phone: "" };
                     }
                 }
 
                 return {
                     ...wsData,
-                    id: wsDoc.id,
-                    vendorName,
-                    vendorPhone,
+                    id: reg.workshopId,
+                    vendorName: vendorInfo?.name || "Unknown",
+                    vendorPhone: vendorInfo?.phone || "",
                     status: reg.status,
                     registrationId: reg.id,
                     participantName: reg.participantDetails?.fullName || "Guest",
                     participantPhone: reg.participantDetails?.phone || "",
                     participantEmail: reg.userEmail || "",
                     participantAge: reg.participantDetails?.age || "",
-
                     participantAddress: reg.participantDetails?.address || "",
                     refundId: reg.refundId,
                     rejectionReason: reg.rejectionReason
