@@ -60,7 +60,8 @@ export class WorkshopController {
             createdAt: serverTimestamp(),
             rating: 0,
             ratingCount: 0,
-            refundUntil: data.refundUntil || ""
+            refundUntil: data.refundUntil || "",
+            refundPolicy: data.refundPolicy || ""
         };
 
         // Clean undefined

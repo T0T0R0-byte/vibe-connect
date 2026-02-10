@@ -61,6 +61,7 @@ const VendorDashboard: React.FC = () => {
   const [consentRequired, setConsentRequired] = useState(false);
   const [fullDetails, setFullDetails] = useState("");
   const [refundUntil, setRefundUntil] = useState("");
+  const [refundPolicy, setRefundPolicy] = useState("");
 
 
 
@@ -167,12 +168,12 @@ const VendorDashboard: React.FC = () => {
       if (selectedWorkshop) {
         await WorkshopController.updateWorkshop(selectedWorkshop.id, {
           title, description, category, date, whatsappLink, location, capacity, ageGroup, consentRequired, fullDetails,
-          imageUrl: directImageUrl, refundUntil: refundUntil || undefined
+          imageUrl: directImageUrl, refundUntil: refundUntil || undefined, refundPolicy
         }, images);
       } else {
         await WorkshopController.createWorkshop(user.uid, {
           title, description, category, date, whatsappLink, location, capacity, ageGroup, consentRequired, fullDetails,
-          imageUrl: directImageUrl, refundUntil: refundUntil || undefined
+          imageUrl: directImageUrl, refundUntil: refundUntil || undefined, refundPolicy
         }, images);
       }
       setIsCreateOpen(false);
@@ -226,6 +227,7 @@ const VendorDashboard: React.FC = () => {
     setTitle(""); setDescription(""); setCategory("Art"); setDate(""); setWhatsappLink(""); setImages([]);
     setDirectImageUrl(""); setFullDetails(""); setLocation("Online"); setCapacity(0); setAgeGroup("All Ages");
     setConsentRequired(false); setSelectedWorkshop(null); setRefundUntil("");
+    setRefundPolicy("");
   };
 
   // Render Loading
@@ -387,6 +389,7 @@ const VendorDashboard: React.FC = () => {
                 setConsentRequired(ws.consentRequired || false);
                 setDirectImageUrl(ws.imageUrl || "");
                 setRefundUntil(ws.refundUntil || "");
+                setRefundPolicy(ws.refundPolicy || "");
                 setIsCreateOpen(true);
               }}
               onDelete={handleDelete}
@@ -578,72 +581,79 @@ const VendorDashboard: React.FC = () => {
                           className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-amber-500 outline-none focus:border-amber-500/50 transition-all uppercase tracking-widest"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Location</label>
-                        <input
-                          placeholder="City or 'Online'"
-                          value={location}
-                          onChange={e => setLocation(e.target.value)}
-                          className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-indigo-400/50 transition-all"
-                        />
-                      </div>
                     </div>
-                  </div>
-
-                  {/* Section 3: Connectivity */}
-                  <div className="space-y-6 pt-6 border-t border-white/5">
-                    <h3 className="text-xs font-black text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                      <i className="fa-brands fa-whatsapp"></i> Connectivity & Media
-                    </h3>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">WhatsApp Group Link</label>
-                      <input
-                        placeholder="https://chat.whatsapp.com/..."
-                        value={whatsappLink}
-                        onChange={e => setWhatsappLink(e.target.value)}
-                        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-emerald-400 outline-none focus:border-emerald-400/50 transition-all placeholder:text-muted-foreground/20"
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Stripe Refund Policy Text</label>
+                      <textarea
+                        placeholder="Detail your cancellation and refund terms (e.g., 'Full refund if cancelled before [Date], 50% otherwise')."
+                        value={refundPolicy}
+                        onChange={e => setRefundPolicy(e.target.value)}
+                        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-medium text-white outline-none focus:border-amber-500/50 transition-all min-h-[80px] resize-none"
                       />
-                      <p className="text-[9px] text-muted-foreground ml-1">Participants will see this link after successful registration.</p>
                     </div>
-
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Cover Image</label>
-
-                      {/* Option A: File Upload */}
-                      <div className="border-2 border-dashed border-white/10 rounded-2xl p-8 text-center cursor-pointer hover:bg-white/5 transition-all group relative overflow-hidden">
-                        <input type="file" multiple onChange={e => setImages(Array.from(e.target.files || []))} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
-                        <div className="relative z-0">
-                          <i className="fa-solid fa-cloud-arrow-up text-3xl text-muted-foreground mb-3 group-hover:text-primary transition-colors"></i>
-                          <p className="text-xs font-bold text-white uppercase tracking-widest">
-                            {images.length > 0 ? `${images.length} Files Selected` : "Drag & Drop or Click"}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground mt-1">Supports JPG, PNG, WEBP</p>
-                        </div>
-                      </div>
-
-                      {/* Option B: Direct URL */}
-                      <div className="flex items-center gap-4">
-                        <div className="h-px bg-white/10 flex-1"></div>
-                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">OR</span>
-                        <div className="h-px bg-white/10 flex-1"></div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Paste Image URL</label>
-                        <input
-                          placeholder="https://..."
-                          value={directImageUrl}
-                          onChange={e => setDirectImageUrl(e.target.value)}
-                          className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-purple-500/50 transition-all placeholder:text-muted-foreground/20"
-                        />
-                        <p className="text-[9px] text-muted-foreground ml-1">Enter a direct image link from Unsplash, Pexels, etc.</p>
-                      </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Location</label>
+                      <input
+                        placeholder="City or 'Online'"
+                        value={location}
+                        onChange={e => setLocation(e.target.value)}
+                        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-indigo-400/50 transition-all"
+                      />
                     </div>
                   </div>
+                </div>
 
+                {/* Section 3: Connectivity */}
+                <div className="space-y-6 pt-6 border-t border-white/5 p-8 overflow-y-auto">
+                  <h3 className="text-xs font-black text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <i className="fa-brands fa-whatsapp"></i> Connectivity & Media
+                  </h3>
 
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">WhatsApp Group Link</label>
+                    <input
+                      placeholder="https://chat.whatsapp.com/..."
+                      value={whatsappLink}
+                      onChange={e => setWhatsappLink(e.target.value)}
+                      className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-emerald-400 outline-none focus:border-emerald-400/50 transition-all placeholder:text-muted-foreground/20"
+                    />
+                    <p className="text-[9px] text-muted-foreground ml-1">Participants will see this link after successful registration.</p>
+                  </div>
 
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Cover Image</label>
+
+                    {/* Option A: File Upload */}
+                    <div className="border-2 border-dashed border-white/10 rounded-2xl p-8 text-center cursor-pointer hover:bg-white/5 transition-all group relative overflow-hidden">
+                      <input type="file" multiple onChange={e => setImages(Array.from(e.target.files || []))} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                      <div className="relative z-0">
+                        <i className="fa-solid fa-cloud-arrow-up text-3xl text-muted-foreground mb-3 group-hover:text-primary transition-colors"></i>
+                        <p className="text-xs font-bold text-white uppercase tracking-widest">
+                          {images.length > 0 ? `${images.length} Files Selected` : "Drag & Drop or Click"}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-1">Supports JPG, PNG, WEBP</p>
+                      </div>
+                    </div>
+
+                    {/* Option B: Direct URL */}
+                    <div className="flex items-center gap-4">
+                      <div className="h-px bg-white/10 flex-1"></div>
+                      <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">OR</span>
+                      <div className="h-px bg-white/10 flex-1"></div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Paste Image URL</label>
+                      <input
+                        placeholder="https://..."
+                        value={directImageUrl}
+                        onChange={e => setDirectImageUrl(e.target.value)}
+                        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-purple-500/50 transition-all placeholder:text-muted-foreground/20"
+                      />
+                      <p className="text-[9px] text-muted-foreground ml-1">Enter a direct image link from Unsplash, Pexels, etc.</p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Modal Footer */}
@@ -661,7 +671,6 @@ const VendorDashboard: React.FC = () => {
                     {selectedWorkshop ? 'Save Changes' : 'Launch Vibe'}
                   </button>
                 </div>
-
               </motion.div>
             </div>
           )}

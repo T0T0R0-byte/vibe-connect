@@ -116,6 +116,42 @@ export const CustomizationView: React.FC<CustomizationViewProps> = ({ userData, 
                         </div>
                     </div>
                 </GlassCard>
+
+                {/* Verification Section */}
+                <GlassCard className="p-10 bg-amber-500/5 border-amber-500/10 lg:col-span-2">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                        <div className="flex-1">
+                            <h3 className="text-xl font-black text-amber-500 uppercase tracking-tight flex items-center gap-3 mb-2">
+                                <i className="fa-solid fa-file-shield"></i>
+                                Verification Documentation
+                            </h3>
+                            <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest leading-relaxed">
+                                Upload your Business ID, Stageworks Permit, or relevant domain documentation to unlock full creator features.
+                            </p>
+                        </div>
+                        <div className="w-full md:w-auto">
+                            <label className="flex items-center gap-3 px-8 py-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl cursor-pointer hover:bg-amber-500/20 transition-all group">
+                                <i className="fa-solid fa-cloud-arrow-up text-amber-500 text-lg group-hover:scale-110 transition-transform"></i>
+                                <span className="text-xs font-black text-amber-500 uppercase tracking-widest">Upload Files</span>
+                                <input type="file" className="hidden" multiple onChange={(e) => {
+                                    // Documentation upload logic would go here
+                                    alert("Documents selected. These will be uploaded when you Synchronize Profile.");
+                                }} />
+                            </label>
+                        </div>
+                    </div>
+                    {userData?.isVerified ? (
+                        <div className="mt-6 flex items-center gap-2 text-emerald-400">
+                            <i className="fa-solid fa-circle-check"></i>
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Verified Identity</span>
+                        </div>
+                    ) : (
+                        <div className="mt-6 flex items-center gap-2 text-amber-500/60">
+                            <i className="fa-solid fa-clock"></i>
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Pending Review</span>
+                        </div>
+                    )}
+                </GlassCard>
             </div>
 
             <div className="flex justify-end">

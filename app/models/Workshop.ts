@@ -19,4 +19,5 @@ export interface Workshop {
     fullDetails?: string;
     isFrozen?: boolean;
     refundUntil?: string;
+    refundPolicy?: string;
 }
