@@ -3,63 +3,12 @@ import React, { useState } from "react";
 import { Participant } from "@/app/models/Participant";
 import { rejectRefund } from "@/firebase/workshopActions";
 import { ParticipantController } from "@/app/controllers/ParticipantController";
-import { loadStripe } from "@stripe/stripe-js";
-import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
-
-// -- STRIPE SETUP --
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
-
 interface RefundsViewProps {
     participants: Participant[];
     onIssueRefund?: (regId: string) => Promise<void>;
 }
 
-// -- INTERNAL COMPONENT: Payment Form for Manual Refund --
-const RefundPaymentForm = ({ amount, onSuccess, onCancel }: { amount: number, onSuccess: () => void, onCancel: () => void }) => {
-    const stripe = useStripe();
-    const elements = useElements();
-    const [error, setError] = useState<string | null>(null);
-    const [processing, setProcessing] = useState(false);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!stripe || !elements) return;
-
-        setProcessing(true);
-        setError(null);
-
-        // Confirm Payment (Vendor pays)
-        const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
-            elements,
-            redirect: "if_required",
-        });
-
-        if (confirmError) {
-            setError(confirmError.message || "Payment failed");
-            setProcessing(false);
-        } else if (paymentIntent && paymentIntent.status === "succeeded") {
-            onSuccess();
-        } else {
-            setError("Payment status unknown. Check dashboard.");
-            setProcessing(false);
-        }
-    };
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <PaymentElement />
-            {error && <div className="text-red-500 text-xs font-bold">{error}</div>}
-            <div className="flex gap-2 justify-end mt-4">
-                <button type="button" onClick={onCancel} disabled={processing} className="px-4 py-2 text-xs font-bold text-muted-foreground hover:text-white">Cancel</button>
-                <button type="submit" disabled={!stripe || processing} className="px-6 py-2 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/20">
-                    {processing ? "Processing..." : `Pay Refund (Rs. ${amount})`}
-                </button>
-            </div>
-        </form>
-    );
-};
-
-export const RefundsView: React.FC<RefundsViewProps> = ({ participants }) => {
+export const RefundsView: React.FC<RefundsViewProps> = ({ participants, onIssueRefund }) => {
     // Filter only those who requested refund or are refunded/rejected
     const refundList = participants.filter(p => p.status ? ['refund_requested', 'refunded', 'rejected', 'refund_rejected'].includes(p.status) : false);
 
@@ -70,55 +19,20 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ participants }) => {
     const [clientSecret, setClientSecret] = useState<string | null>(null);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
 
-    // 1. Approve Refund -> Opens Payment Modal
+    // 1. Approve Refund -> Triggers Backend Logic
     const handleApproveRefund = async (participant: Participant) => {
-        if (!participant.registrationId) return;
+        if (!participant.registrationId || !onIssueRefund) return;
 
-        // Setup for payment
-        setSelectedRefund(participant);
         setLoadingAction(participant.registrationId);
-
         try {
-            // Create payment intent for the refund amount (Vendor paying the refund)
-            const res = await fetch("/api/create-payment-intent", {
-                method: "POST",
-                body: JSON.stringify({
-                    amount: participant.workshopPrice,
-                    workshopTitle: `Refund: ${participant.workshopTitle} (User: ${participant.displayName})`
-                }),
-            });
-
-            const data = await res.json();
-            if (data.clientSecret) {
-                setClientSecret(data.clientSecret);
-                setShowPaymentModal(true);
-            } else {
-                alert("Failed to initialize refund payment.");
-            }
+            await onIssueRefund(participant.registrationId);
         } catch (error) {
-            console.error("Refund Init Error", error);
-            alert("Error initializing refund gateway.");
+            console.error("Refund Error", error);
+            alert("Error processing refund.");
         } finally {
             setLoadingAction(null);
         }
     };
-
-    const handlePaymentSuccess = async () => {
-        if (!selectedRefund?.registrationId) return;
-
-        try {
-            // Update status to refunded manually since we just paid
-            await ParticipantController.updateStatus(selectedRefund.registrationId, 'refunded');
-            alert("Refund processed and paid successfully!");
-            setShowPaymentModal(false);
-            setClientSecret(null);
-            setSelectedRefund(null);
-        } catch (error) {
-            console.error(error);
-            alert("Payment marked successful but failed to update status.");
-        }
-    };
-
 
     // 2. Reject Refund
     const openRejectModal = (participant: Participant) => {
@@ -372,29 +286,6 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ participants }) => {
                                 Reject Refund
                             </button>
                         </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Payment Modal for Approval */}
-            {showPaymentModal && clientSecret && selectedRefund && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                    <div className="bg-[#121212] w-full max-w-md rounded-[2rem] border border-white/10 p-8 shadow-2xl animate-in zoom-in-95">
-                        <div className="mb-6">
-                            <h3 className="text-xl font-black text-white uppercase tracking-tight">Process Refund</h3>
-                            <p className="text-xs font-bold text-muted-foreground mt-1">
-                                Refund <span className="text-primary">Rs. {selectedRefund.workshopPrice}</span> to {selectedRefund.displayName}
-                            </p>
-                        </div>
-
-                        {/* Element Wrapper */}
-                        <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'night', variables: { colorPrimary: '#6366f1' } } }}>
-                            <RefundPaymentForm
-                                amount={selectedRefund.workshopPrice || 0}
-                                onSuccess={handlePaymentSuccess}
-                                onCancel={() => { setShowPaymentModal(false); setClientSecret(null); setSelectedRefund(null); }}
-                            />
-                        </Elements>
                     </div>
                 </div>
             )}

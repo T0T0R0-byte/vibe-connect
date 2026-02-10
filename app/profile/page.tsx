@@ -661,12 +661,20 @@ function ProfileContent() {
 
                                                         <div className="mt-auto flex items-center gap-3">
                                                             {ws.status !== 'refunded' && ws.status !== 'refund_requested' && (
-                                                                <button
-                                                                    onClick={() => openReviewModal(ws)}
-                                                                    className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${userReviews[ws.id] ? 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20' : 'bg-white text-black hover:bg-white/80 shadow-lg shadow-white/10'}`}
-                                                                >
-                                                                    {userReviews[ws.id] ? 'Edit Review' : 'Write Review'}
-                                                                </button>
+
+
+                                                                new Date(ws.date) > new Date() ? (
+                                                                    <span className="px-4 py-2 bg-white/5 text-muted-foreground text-[10px] font-bold uppercase tracking-widest rounded-lg border border-white/5 cursor-not-allowed" title="Available after workshop">
+                                                                        Upcoming
+                                                                    </span>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => openReviewModal(ws)}
+                                                                        className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${userReviews[ws.id] ? 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20' : 'bg-white text-black hover:bg-white/80 shadow-lg shadow-white/10'}`}
+                                                                    >
+                                                                        {userReviews[ws.id] ? 'Edit Review' : 'Write Review'}
+                                                                    </button>
+                                                                )
                                                             )}
 
                                                             {ws.status === 'confirmed' && (

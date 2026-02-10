@@ -401,12 +401,12 @@ const VendorDashboard: React.FC = () => {
               participants={allParticipants}
               onIssueRefund={async (regId) => {
                 try {
-                  // Update status in backend (assuming payment success handled inside view)
-                  await ParticipantController.updateStatus(regId, 'refunded');
-                  alert("Refund processed successfully!");
-
+                  if (confirm("Confirm refund? This will reverse the payment via Stripe.")) {
+                    await ParticipantController.issueRefund(regId);
+                    alert("Refund processed successfully!");
+                  }
                 } catch (e) {
-                  alert("Failed to update status: " + e);
+                  alert("Failed to process refund: " + e);
                 }
               }}
             />

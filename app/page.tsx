@@ -7,7 +7,6 @@ import { getAllWorkshops } from "@/firebase/workshopActions";
 
 export default async function Home() {
   const workshops = await getAllWorkshops();
-
   const categories = [
     { label: "Art", icon: "🎨", count: "120+", color: "from-pink-500/20 to-rose-500/20" },
     { label: "Tech", icon: "💻", count: "85+", color: "from-blue-500/20 to-cyan-500/20" },

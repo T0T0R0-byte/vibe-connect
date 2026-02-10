@@ -228,6 +228,18 @@ export const registerForWorkshop = async (
 ) => {
 
 
+
+  // Check if workshop is frozen
+  const checkWorkshopRef = doc(db, "workshops", workshopId);
+  const checkWorkshopSnap = await getDoc(checkWorkshopRef);
+  if (!checkWorkshopSnap.exists()) {
+    throw new Error("Workshop not found");
+  }
+  const workshopData = checkWorkshopSnap.data();
+  if (workshopData.isFrozen) {
+    throw new Error("Registration is currently closed for this workshop.");
+  }
+
   const groupId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
   const batchPromises = participants.map(async (participant) => {
@@ -277,6 +289,31 @@ export const registerForWorkshop = async (
 // REQUEST REFUND (User Action)
 export const requestRefund = async (registrationId: string, reason: string) => {
   const regRef = doc(db, "registrations", registrationId);
+  const regSnap = await getDoc(regRef);
+
+  if (!regSnap.exists()) {
+    throw new Error("Registration not found");
+  }
+
+  const regData = regSnap.data();
+
+  // Check Refund Policy
+  const workshopRef = doc(db, "workshops", regData.workshopId);
+  const workshopSnap = await getDoc(workshopRef);
+
+  if (workshopSnap.exists()) {
+    const workshopData = workshopSnap.data();
+    if (workshopData.refundUntil) {
+      const refundDeadline = new Date(workshopData.refundUntil);
+      // Set timeline to end of the refund date
+      refundDeadline.setHours(23, 59, 59, 999);
+
+      if (new Date() > refundDeadline) {
+        throw new Error(`Refund period expired on ${refundDeadline.toLocaleDateString()}`);
+      }
+    }
+  }
+
   const refundId = `REF-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
   await updateDoc(regRef, {
