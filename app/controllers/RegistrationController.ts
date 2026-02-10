@@ -1,11 +1,8 @@
 import { db, storage } from "@/firebase/firebaseConfig";
-import {
-    collection, addDoc, doc, setDoc, updateDoc, increment, arrayUnion, serverTimestamp, getDoc, query, where, orderBy, getDocs
-} from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, updateDoc, increment, arrayUnion, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, StorageReference } from "firebase/storage";
-import { Registration } from "../models/Registration";
 
-// Helper for robust upload with timeout
+// Helper for robust upload
 const uploadWithTimeout = async (fileRef: StorageReference, file: File): Promise<string> => {
     try {
         const uploadTask = uploadBytes(fileRef, file);
@@ -22,107 +19,57 @@ const uploadWithTimeout = async (fileRef: StorageReference, file: File): Promise
 
 export class RegistrationController {
 
-    /**
-     * Register multiple participants for a workshop (Bulk Booking)
-     */
-    static async registerForWorkshop(
+    static async registerUser(
         workshopId: string,
         userId: string,
-        userEmail: string,
-        vendorId: string,
-        paymentIntentId: string | null,
-        participants: {
-            fullName: string;
-            age: string;
-            phone: string;
-            address: string;
-            consentFile?: File | null;
-            consentUrl?: string;
-        }[]
+        receiptFile: File | null,
+        participants: any[] // eslint-disable-line @typescript-eslint/no-explicit-any
     ): Promise<void> {
 
-        // 1. Check if workshop is frozen
-        const workshopRef = doc(db, "workshops", workshopId);
-        const workshopSnap = await getDoc(workshopRef);
-        if (!workshopSnap.exists()) throw new Error("Workshop not found");
+        let receiptUrl = "";
 
-        const workshopData = workshopSnap.data();
-        if (workshopData.isFrozen) throw new Error("Registration is currently closed for this workshop.");
+        // Upload Receipt
+        if (receiptFile) {
+            const sanitizedName = receiptFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
+            const receiptRef = ref(storage, `receipts/${workshopId}/${userId}-${Date.now()}-${sanitizedName}`);
+            receiptUrl = await uploadWithTimeout(receiptRef, receiptFile);
+        }
 
         const groupId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-        // 2. Process each participant (Upload consent and create doc)
-        const batchPromises = participants.map(async (participant) => {
-            let consentUrl = participant.consentUrl || "";
-
-            if (!consentUrl && participant.consentFile) {
-                const fName = participant.consentFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
+        // Batch Create Registrations
+        const promises = participants.map(async (p) => {
+            let consentUrl = "";
+            if (p.consentFile) {
+                const fName = p.consentFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
                 const consentRef = ref(storage, `consents/${workshopId}/${userId}-${Date.now()}-${fName}`);
-                consentUrl = await uploadWithTimeout(consentRef, participant.consentFile);
+                consentUrl = await uploadWithTimeout(consentRef, p.consentFile);
             }
 
-            const { consentFile, ...detailsToStore } = participant;
+            const { consentFile, ...details } = p;
 
-            return addDoc(collection(db, "registrations"), {
+            await addDoc(collection(db, "registrations"), {
                 workshopId,
                 userId,
-                userEmail,
-                vendorId,
                 groupId,
-                paymentIntentId,
-                status: "confirmed",
+                receiptUrl,
+                status: "pending",
                 createdAt: serverTimestamp(),
                 consentAccepted: true,
-                participantDetails: detailsToStore,
-                consentUrl,
+                participantDetails: details,
+                consentUrl
             });
         });
 
-        await Promise.all(batchPromises);
+        await Promise.all(promises);
 
-        // 3. Update User profile with registered workshop
-        const userRef = doc(db, "users", userId);
-        await setDoc(userRef, {
-            registeredWorkshops: arrayUnion(workshopId),
+        // Update User & Workshop Stats
+        await setDoc(doc(db, "users", userId), {
+            registeredWorkshops: arrayUnion(workshopId)
         }, { merge: true });
 
-        // 4. Update Workshop capacity
-        await updateDoc(workshopRef, {
+        await updateDoc(doc(db, "workshops", workshopId), {
             capacity: increment(-participants.length)
         });
-    }
-
-    /**
-     * Fetch all registrations for a specific workshop (Vendor Dashboard)
-     */
-    static async fetchRegistrationsForWorkshop(workshopId: string): Promise<Registration[]> {
-        let q = query(
-            collection(db, "registrations"),
-            where("workshopId", "==", workshopId),
-            orderBy("createdAt", "desc")
-        );
-
-        let snapshot;
-        try {
-            snapshot = await getDocs(q);
-        } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-            // Fallback for missing index
-            console.warn("Fetch failed, trying unsorted fallback.");
-            q = query(collection(db, "registrations"), where("workshopId", "==", workshopId));
-            snapshot = await getDocs(q);
-        }
-
-        return snapshot.docs.map(d => ({
-            registrationId: d.id,
-            ...d.data(),
-            displayName: d.data().participantDetails?.fullName || "Guest",
-        } as any as Registration));
-    }
-
-    /**
-     * Update the status of a registration
-     */
-    static async updateStatus(registrationId: string, status: string): Promise<void> {
-        await updateDoc(doc(db, "registrations", registrationId), { status });
     }
 }
