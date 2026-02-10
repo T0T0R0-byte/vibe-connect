@@ -1,60 +1,40 @@
 
 import React, { useState } from "react";
-import { Participant } from "@/app/models/Participant";
-import { rejectRefund } from "@/firebase/workshopActions";
-import { ParticipantController } from "@/app/controllers/ParticipantController";
+import { Registration } from "@/app/models/Registration";
+
 interface RefundsViewProps {
-    participants: Participant[];
-    onIssueRefund?: (regId: string) => Promise<void>;
+    participants: Registration[];
+    onIssueRefund: (regId: string) => Promise<any>;
+    onRejectRefund: (regId: string, reason: string) => Promise<void>;
 }
 
-export const RefundsView: React.FC<RefundsViewProps> = ({ participants, onIssueRefund }) => {
-    // Filter only those who requested refund or are refunded/rejected
-    const refundList = participants.filter(p => p.status ? ['refund_requested', 'refunded', 'rejected', 'refund_rejected'].includes(p.status) : false);
+export const RefundsView: React.FC<RefundsViewProps> = ({ participants, onIssueRefund, onRejectRefund }) => {
+    const refundList = participants.filter(p => ['refund_requested', 'refunded', 'rejected', 'refund_rejected'].includes(p.status || ''));
 
     const [loadingAction, setLoadingAction] = useState<string | null>(null);
     const [rejectModalOpen, setRejectModalOpen] = useState(false);
-    const [selectedRefund, setSelectedRefund] = useState<Participant | null>(null);
+    const [selectedRefund, setSelectedRefund] = useState<Registration | null>(null);
     const [rejectionReason, setRejectionReason] = useState("");
-    const [clientSecret, setClientSecret] = useState<string | null>(null);
-    const [showPaymentModal, setShowPaymentModal] = useState(false);
 
-    // 1. Approve Refund -> Triggers Backend Logic
-    const handleApproveRefund = async (participant: Participant) => {
-        if (!participant.registrationId || !onIssueRefund) return;
-
-        setLoadingAction(participant.registrationId);
+    const handleApproveRefund = async (reg: Registration) => {
+        if (!reg.registrationId) return;
+        setLoadingAction(reg.registrationId);
         try {
-            await onIssueRefund(participant.registrationId);
+            await onIssueRefund(reg.registrationId);
         } catch (error) {
-            console.error("Refund Error", error);
             alert("Error processing refund.");
         } finally {
             setLoadingAction(null);
         }
     };
 
-    // 2. Reject Refund
-    const openRejectModal = (participant: Participant) => {
-        setSelectedRefund(participant);
-        setRejectionReason("");
-        setRejectModalOpen(true);
-    };
-
     const handleRejectRefund = async () => {
-        if (!selectedRefund?.registrationId) return;
-        if (!rejectionReason.trim()) {
-            alert("Please provide a reason for rejection.");
-            return;
-        }
-
+        if (!selectedRefund?.registrationId || !rejectionReason.trim()) return;
         setLoadingAction(selectedRefund.registrationId);
         try {
-            await rejectRefund(selectedRefund.registrationId, rejectionReason);
-            alert("Refund request rejected.");
+            await onRejectRefund(selectedRefund.registrationId, rejectionReason);
             setRejectModalOpen(false);
         } catch (error) {
-            console.error("Rejection failed", error);
             alert("Failed to reject request.");
         } finally {
             setLoadingAction(null);
@@ -63,7 +43,6 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ participants, onIssueR
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Header */}
             <div className="glass-card !p-8 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full -mr-12 -mt-12 pointer-events-none"></div>
                 <div className="flex items-center gap-6 z-10">
@@ -77,25 +56,20 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ participants, onIssueR
                 </div>
             </div>
 
-            {/* Pending Requests Section */}
             <div className="space-y-4 mb-8">
                 <h3 className="text-lg font-black text-foreground uppercase tracking-tight flex items-center gap-2 px-1">
                     <i className="fa-solid fa-clock text-orange-500"></i> Pending Requests
-                    <span className="text-xs font-bold text-muted-foreground bg-white/5 px-2 py-1 rounded-full ml-2">{refundList.filter(p => p.status === 'refund_requested').length}</span>
                 </h3>
 
                 <div className="glass-card !p-0 overflow-hidden">
                     {refundList.filter(p => p.status === 'refund_requested').length === 0 ? (
                         <div className="p-8 text-center bg-white/5">
-                            <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <i className="fa-solid fa-check text-green-500"></i>
-                            </div>
-                            <p className="text-sm font-bold text-muted-foreground">All caught up! No pending refunds.</p>
+                            <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest opacity-50">No pending refunds</p>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
-                                <thead className="bg-orange-500/10 border-b border-orange-500/10 text-[10px] font-black uppercase tracking-widest text-orange-500">
+                                <thead className="bg-white/5 border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                                     <tr>
                                         <th className="px-8 py-4">Participant</th>
                                         <th className="px-8 py-4">Workshop</th>
@@ -109,57 +83,25 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ participants, onIssueR
                                         <tr key={p.registrationId} className="hover:bg-white/5 transition-colors">
                                             <td className="px-8 py-6">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] font-black text-white">
-                                                        {p.displayName[0]}
+                                                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-black text-primary uppercase">
+                                                        {p.displayName?.[0] || 'U'}
                                                     </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-bold text-foreground">{p.displayName}</span>
-                                                        <p className="text-[10px] text-muted-foreground font-medium flex items-center gap-2">
-                                                            <span><i className="fa-solid fa-phone scale-75 opacity-70"></i> {p.phoneNumber || "No Phone"}</span>
-                                                            <span className="opacity-30">•</span>
-                                                            <span><i className="fa-solid fa-envelope scale-75 opacity-70"></i> {p.email}</span>
-                                                        </p>
-                                                        {p.consentUrl && (
-                                                            <a href={p.consentUrl} target="_blank" className="text-[9px] font-bold text-primary hover:underline mt-1 flex items-center gap-1">
-                                                                <i className="fa-solid fa-file-contract"></i> View Consent
-                                                            </a>
-                                                        )}
-                                                    </div>
+                                                    <span className="text-xs font-bold text-white">{p.displayName}</span>
                                                 </div>
                                             </td>
                                             <td className="px-8 py-6">
-                                                <span className="text-xs font-bold text-muted-foreground">{p.workshopTitle}</span>
+                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{(p as any).workshopTitle}</span>
+                                            </td>
+                                            <td className="px-8 py-6 text-xs font-black text-white">
+                                                Rs. {(p as any).workshopPrice}
                                             </td>
                                             <td className="px-8 py-6">
-                                                <span className="text-xs font-black text-foreground">Rs. {p.workshopPrice}</span>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <p className="text-xs font-medium text-foreground truncate max-w-[200px]" title={p.refundReason || "No reason provided"}>
-                                                    {p.refundReason || "No reason"}
-                                                </p>
+                                                <p className="text-[10px] text-muted-foreground max-w-[200px] truncate">{(p as any).refundReason || "No reason"}</p>
                                             </td>
                                             <td className="px-8 py-6 text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    <button
-                                                        onClick={() => openRejectModal(p)}
-                                                        disabled={loadingAction === p.registrationId}
-                                                        className="px-4 py-2 bg-white/5 text-muted-foreground hover:text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all border border-white/5"
-                                                    >
-                                                        Reject
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleApproveRefund(p)}
-                                                        disabled={loadingAction === p.registrationId}
-                                                        className="px-4 py-2 bg-green-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-green-600 transition-all shadow-lg shadow-green-500/20 flex items-center gap-2"
-                                                    >
-                                                        {loadingAction === p.registrationId ? (
-                                                            <i className="fa-solid fa-circle-notch animate-spin"></i>
-                                                        ) : (
-                                                            <>
-                                                                <i className="fa-solid fa-check"></i> Approve
-                                                            </>
-                                                        )}
-                                                    </button>
+                                                    <button onClick={() => { setSelectedRefund(p); setRejectModalOpen(true); }} className="px-4 py-2 text-[9px] font-black text-white uppercase tracking-widest bg-white/5 rounded-xl border border-white/10 hover:bg-white/10">Reject</button>
+                                                    <button onClick={() => handleApproveRefund(p)} className="px-4 py-2 text-[9px] font-black text-white uppercase tracking-widest bg-primary rounded-xl shadow-lg shadow-primary/20">Approve</button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -171,120 +113,51 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ participants, onIssueR
                 </div>
             </div>
 
-            {/* History Section */}
             <div className="space-y-4">
                 <h3 className="text-lg font-black text-foreground uppercase tracking-tight flex items-center gap-2 px-1">
-                    <i className="fa-solid fa-clock-rotate-left text-muted-foreground"></i> History
+                    <i className="fa-solid fa-clock-rotate-left text-muted-foreground"></i> Refund History
                 </h3>
-
-                <div className="glass-card !p-0 overflow-hidden">
-                    {refundList.filter(p => p.status !== 'refund_requested').length === 0 ? (
-                        <div className="p-8 text-center">
-                            <p className="text-xs font-bold text-muted-foreground">No refund history available.</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-white/5 border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                                    <tr>
-                                        <th className="px-8 py-4">Participant</th>
-                                        <th className="px-8 py-4">Workshop</th>
-                                        <th className="px-8 py-4">Amount</th>
-                                        <th className="px-8 py-4">Details</th>
-                                        <th className="px-8 py-4">Status</th>
+                <div className="glass-card !p-0 overflow-hidden opacity-80">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-white/5 border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                <tr>
+                                    <th className="px-8 py-4">Participant</th>
+                                    <th className="px-8 py-4">Workshop</th>
+                                    <th className="px-8 py-4">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {refundList.filter(p => p.status !== 'refund_requested').map((p) => (
+                                    <tr key={p.registrationId}>
+                                        <td className="px-8 py-6 text-xs font-bold text-white">{p.displayName}</td>
+                                        <td className="px-8 py-6 text-[10px] uppercase tracking-widest text-muted-foreground">{(p as any).workshopTitle}</td>
+                                        <td className="px-8 py-6">
+                                            <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${p.status === 'refunded' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+                                                {p.status}
+                                            </span>
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/5">
-                                    {refundList.filter(p => p.status !== 'refund_requested').map((p) => (
-                                        <tr key={p.registrationId} className="hover:bg-white/5 transition-colors opacity-75">
-                                            <td className="px-8 py-6">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-black text-muted-foreground">
-                                                        {p.displayName[0]}
-                                                    </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-bold text-muted-foreground">{p.displayName}</span>
-                                                        <p className="text-[10px] text-muted-foreground/50 font-medium flex items-center gap-2">
-                                                            <span><i className="fa-solid fa-phone scale-75 opacity-70"></i> {p.phoneNumber || "N/A"}</span>
-                                                            <span className="opacity-30">•</span>
-                                                            <span><i className="fa-solid fa-envelope scale-75 opacity-70"></i> {p.email}</span>
-                                                        </p>
-                                                        {p.consentUrl && (
-                                                            <a href={p.consentUrl} target="_blank" className="text-[9px] font-bold text-primary/60 hover:text-primary hover:underline mt-1 flex items-center gap-1">
-                                                                <i className="fa-solid fa-file-contract"></i> View Consent
-                                                            </a>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <span className="text-xs font-bold text-muted-foreground">{p.workshopTitle}</span>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <span className="text-xs font-bold text-muted-foreground">Rs. {p.workshopPrice}</span>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <div className="max-w-[200px]">
-                                                    {p.rejectionReason ? (
-                                                        <p className="text-[10px] text-red-400 truncate" title={p.rejectionReason}>
-                                                            Rejected: {p.rejectionReason}
-                                                        </p>
-                                                    ) : (
-                                                        <p className="text-[10px] text-muted-foreground truncate">
-                                                            Reason: {p.refundReason || "N/A"}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                {p.status === 'refunded' && (
-                                                    <span className="px-3 py-1 rounded-lg bg-green-500/10 text-green-500 border border-green-500/20 text-[9px] font-black uppercase tracking-widest">
-                                                        Refunded
-                                                    </span>
-                                                )}
-                                                {(p.status === 'rejected' || p.status === 'refund_rejected') && (
-                                                    <span className="px-3 py-1 rounded-lg bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] font-black uppercase tracking-widest">
-                                                        Rejected
-                                                    </span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
-            {/* Rejection Modal */}
             {rejectModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-[#121212] w-full max-w-sm rounded-[2rem] border border-white/10 p-8 shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
-                        <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2">Reject Request</h3>
-                        <p className="text-xs font-bold text-muted-foreground mb-6">Why are you rejecting this refund?</p>
-
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+                    <div className="bg-[#121212] w-full max-w-sm rounded-3xl border border-white/10 p-8 shadow-2xl">
+                        <h3 className="text-xl font-black text-white uppercase tracking-tight mb-6">Reject Refund</h3>
                         <textarea
                             value={rejectionReason}
                             onChange={e => setRejectionReason(e.target.value)}
-                            className="w-full bg-white/5 border border-white/5 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-red-500/50 mb-6 h-32 resize-none"
+                            className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 text-sm text-white focus:outline-none focus:border-red-500/50 mb-6 h-32 resize-none"
                             placeholder="Reason for rejection..."
                         />
-
                         <div className="flex justify-end gap-3">
-                            <button
-                                onClick={() => setRejectModalOpen(false)}
-                                className="px-4 py-3 rounded-xl text-xs font-bold text-muted-foreground hover:text-white hover:bg-white/5 transition-all"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleRejectRefund}
-                                disabled={loadingAction === selectedRefund?.registrationId}
-                                className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-lg shadow-red-500/20"
-                            >
-                                Reject Refund
-                            </button>
+                            <button onClick={() => setRejectModalOpen(false)} className="px-4 py-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Cancel</button>
+                            <button onClick={handleRejectRefund} className="px-6 py-3 bg-red-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl">Reject Refund</button>
                         </div>
                     </div>
                 </div>

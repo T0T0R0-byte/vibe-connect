@@ -1,27 +1,23 @@
 import React from 'react';
 import { Workshop } from "@/app/models/Workshop";
-import { UserData } from "@/app/context/AuthContext";
-import { Participant } from "@/app/models/Participant";
+import { Registration } from "@/app/models/Registration";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { GlassCard } from "@/app/components/ui/GlassCard";
 import dayjs from "dayjs";
 
 interface OverviewViewProps {
-    userData: UserData;
     workshops: Workshop[];
-    participants: Participant[];
-    totalRevenue: number;
-    participantsMap: Record<string, Participant[]>;
-    onCreate: () => void;
+    allParticipants: Registration[];
+    onSwitchTab: (tab: string) => void;
 }
 
-export const OverviewView: React.FC<OverviewViewProps> = React.memo(({ userData, workshops, participants, totalRevenue, participantsMap, onCreate }) => {
+export const OverviewView: React.FC<OverviewViewProps> = React.memo(({ workshops, allParticipants, onSwitchTab }) => {
 
-    // Stats Logic (Pure View Logic)
-    const activeParticipants = participants.filter(p =>
-        ['paid', 'approved', 'pending', 'confirmed', 'refund_requested', 'refund_rejected'].includes(p.status || '')
+    const activeParticipants = allParticipants.filter(p =>
+        ['paid', 'approved', 'pending', 'confirmed'].includes(p.status || '')
     );
-    const pendingParticipants = participants.filter(p => p.status === 'pending');
+    const pendingParticipants = allParticipants.filter(p => p.status === 'pending');
+    const totalRevenue = activeParticipants.reduce((sum, p) => sum + ((p as any).workshopPrice || 0), 0);
 
     const stats = [
         { label: 'Total Revenue', value: `Rs. ${totalRevenue.toLocaleString()}`, icon: 'fa-coins', color: 'from-amber-500 to-orange-600', sub: 'Gross Earnings' },
@@ -30,78 +26,24 @@ export const OverviewView: React.FC<OverviewViewProps> = React.memo(({ userData,
         { label: 'Avg. Rating', value: '5.0', icon: 'fa-star', color: 'from-purple-500 to-pink-600', sub: 'Verified Reviews' },
     ];
 
-    // Chart Data Logic for Last 7 Days Revenue
     const chartData = React.useMemo(() => {
         const days = Array.from({ length: 7 }, (_, i) => {
             const d = dayjs().subtract(6 - i, 'day');
-            return {
-                date: d.format('YYYY-MM-DD'),
-                name: d.format('ddd'), // Mon, Tue
-                value: 0
-            };
+            return { date: d.format('YYYY-MM-DD'), name: d.format('ddd'), value: 0 };
         });
 
-        // Loop participants and sum up revenue if paid/approved/confirmed/refund_requested
-        participants.forEach(p => {
-            if (['paid', 'approved', 'confirmed', 'refund_requested', 'refund_rejected'].includes(p.status || '') && p.createdAt) {
-                // Try to convert timestamp or date string
-                let dateStr = "";
-
-                // Handle Firestore Timestamp or ISO String
-                // @ts-ignore
-                if (p.createdAt?.seconds) {
-                    // @ts-ignore
-                    dateStr = dayjs.unix(p.createdAt.seconds).format('YYYY-MM-DD');
-                } else if (typeof p.createdAt === 'string') {
-                    dateStr = dayjs(p.createdAt).format('YYYY-MM-DD');
-                }
-
+        activeParticipants.forEach(p => {
+            if ((p as any).createdAt) {
+                const dateStr = dayjs((p as any).createdAt.seconds ? (p as any).createdAt.seconds * 1000 : (p as any).createdAt).format('YYYY-MM-DD');
                 const dayData = days.find(d => d.date === dateStr);
-                if (dayData) {
-                    dayData.value += (p.workshopPrice || 0);
-                }
+                if (dayData) dayData.value += ((p as any).workshopPrice || 0);
             }
         });
-
         return days;
-    }, [participants]);
+    }, [activeParticipants]);
 
     return (
-        <div className="space-y-8">
-            {/* Welcome Banner */}
-            <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-1">
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
-                <div className="relative bg-[#0a0a0a]/90 backdrop-blur-xl rounded-[2.4rem] p-10 flex flex-col md:flex-row items-center justify-between gap-8">
-                    <div className="space-y-4 text-center md:text-left">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-white/80">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            Live Dashboard
-                        </div>
-                        <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter">
-                            Welcome back, <br />
-                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-pink-400">
-                                {userData?.displayName || 'Vibe Creator'}
-                            </span>
-                        </h2>
-                        <p className="text-white/60 font-medium max-w-lg">
-                            Here&apos;s what&apos;s happening with your workshops today. You have <span className="text-white font-bold">{pendingParticipants.length} new participants</span> waiting for approval.
-                        </p>
-                    </div>
-                    {/* Mini Quick Action */}
-                    <div className="flex gap-4">
-                        <button
-                            onClick={onCreate}
-                            className="w-16 h-16 rounded-2xl bg-white/10 hover:bg-primary hover:border-primary border border-white/10 flex items-center justify-center text-white transition-all group shadow-xl"
-                        >
-                            <i className="fa-solid fa-plus text-xl group-hover:scale-110 transition-transform"></i>
-                        </button>
-                        <button className="w-16 h-16 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white transition-all group">
-                            <i className="fa-solid fa-bell text-xl group-hover:rotate-12 transition-transform"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
+        <div className="space-y-8 animate-in fade-in duration-700">
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {stats.map((stat, i) => (
@@ -112,9 +54,6 @@ export const OverviewView: React.FC<OverviewViewProps> = React.memo(({ userData,
                                 <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${stat.color} flex items-center justify-center text-white shadow-lg`}>
                                     <i className={`fa-solid ${stat.icon} text-lg`}></i>
                                 </div>
-                                <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg">
-                                    <i className="fa-solid fa-arrow-trend-up mr-1"></i> Stable
-                                </span>
                             </div>
                             <h3 className="text-3xl font-black text-foreground tracking-tight mb-1">{stat.value}</h3>
                             <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">{stat.label}</p>
@@ -124,19 +63,10 @@ export const OverviewView: React.FC<OverviewViewProps> = React.memo(({ userData,
                 ))}
             </div>
 
-            {/* Charts Row */}
             <div className="grid lg:grid-cols-3 gap-8">
-                {/* Revenue Chart */}
                 <GlassCard className="lg:col-span-2 !p-8 bg-secondary/30">
-                    <div className="flex items-center justify-between mb-8">
-                        <div>
-                            <h3 className="text-xl font-black text-foreground tracking-tight">Revenue Analytics</h3>
-                            <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mt-1">Last 7 Days Performance</p>
-                        </div>
-                        <button className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-muted-foreground transition-all">
-                            <i className="fa-solid fa-ellipsis"></i>
-                        </button>
-                    </div>
+                    <h3 className="text-xl font-black text-foreground tracking-tight mb-2">Revenue Analytics</h3>
+                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mb-8">Last 7 Days Performance</p>
                     <div className="h-[300px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={chartData}>
@@ -148,11 +78,10 @@ export const OverviewView: React.FC<OverviewViewProps> = React.memo(({ userData,
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
                                 <XAxis dataKey="name" stroke="#666" tick={{ fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} dy={10} />
-                                <YAxis stroke="#666" tick={{ fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} dx={-10} tickFormatter={(value) => `Rs.${value}`} />
+                                <YAxis stroke="#666" tick={{ fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} dx={-10} tickFormatter={(v) => `Rs.${v}`} />
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#000', border: '1px solid #333', borderRadius: '12px' }}
                                     itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
-                                    cursor={{ stroke: '#6366f1', strokeWidth: 1 }}
                                 />
                                 <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
                             </AreaChart>
@@ -160,42 +89,28 @@ export const OverviewView: React.FC<OverviewViewProps> = React.memo(({ userData,
                     </div>
                 </GlassCard>
 
-                {/* Popular Categories */}
                 <GlassCard className="!p-8 bg-secondary/30">
-                    <h3 className="text-xl font-black text-foreground tracking-tight mb-2">Category Spread</h3>
-                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mb-8">Workshop Distribution</p>
-                    <div className="h-[250px] relative">
+                    <h3 className="text-xl font-black text-foreground tracking-tight mb-2">Registration Status</h3>
+                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mb-8">Approval Overview</p>
+                    <div className="h-[300px] relative">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
                                     data={[
-                                        { name: 'Music', value: 400 },
-                                        { name: 'Art', value: 300 },
-                                        { name: 'Tech', value: 300 },
-                                        { name: 'Dance', value: 200 },
+                                        { name: 'Confirmed', value: activeParticipants.length - pendingParticipants.length },
+                                        { name: 'Pending', value: pendingParticipants.length },
                                     ]}
-                                    cx="50%"
-                                    cy="50%"
                                     innerRadius={60}
                                     outerRadius={80}
                                     paddingAngle={5}
                                     dataKey="value"
                                 >
                                     <Cell fill="#6366f1" />
-                                    <Cell fill="#ec4899" />
-                                    <Cell fill="#10b981" />
                                     <Cell fill="#f59e0b" />
                                 </Pie>
-                                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                                <Legend verticalAlign="bottom" height={36} />
                             </PieChart>
                         </ResponsiveContainer>
-                        {/* Ring Text */}
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none mb-8">
-                            <div className="text-center">
-                                <span className="block text-2xl font-black text-foreground">{workshops.length}</span>
-                                <span className="text-[9px] font-bold text-muted-foreground uppercase">Active</span>
-                            </div>
-                        </div>
                     </div>
                 </GlassCard>
             </div>

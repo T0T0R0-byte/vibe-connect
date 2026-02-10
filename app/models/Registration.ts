@@ -1,4 +1,4 @@
-export interface Participant {
+export interface Registration {
     uid: string;
     createdAt?: any;
     displayName: string;
@@ -14,6 +14,7 @@ export interface Participant {
     refundId?: string;
     refundReason?: string;
     rejectionReason?: string;
+    refundUntil?: string; // Policy info
     details?: {
         fullName: string;
         age: string;
