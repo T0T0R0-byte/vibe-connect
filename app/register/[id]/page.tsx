@@ -1,9 +1,5 @@
 "use client";
 
-export function generateStaticParams() {
-    return [{ id: "demo-1" }, { id: "demo-2" }, { id: "demo-3" }];
-}
-
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
