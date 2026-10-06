@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export default function FirebaseSetupHelp() {\n    const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+export default function FirebaseSetupHelp() {
     const [missingKeys, setMissingKeys] = useState<string[]>([]);
     const [isVisible, setIsVisible] = useState(false);
 
@@ -28,7 +28,7 @@ export default function FirebaseSetupHelp() {\n    const demoMode = process.env.
         }
     }, []);
 
-    if (demoMode || !isVisible) return null;
+    if (!isVisible) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-6">
