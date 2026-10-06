@@ -8,7 +8,6 @@ const pages = [
   { name: 'workshops', path: '/workshops', fullPage: false },
   { name: 'login', path: '/login', fullPage: false },
   { name: 'register', path: '/register', fullPage: false },
-  { name: 'faq', path: '/faq', fullPage: true },
 ];
 
 const fs = await import('node:fs/promises');
