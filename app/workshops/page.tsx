@@ -38,6 +38,13 @@ export default async function WorkshopsPage() {
   const workshopList = await getAllWorkshops();
 
   // 2. Fetch Vendors
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+    return (
+      <Suspense fallback={<div className="min-h-screen pt-32 text-center text-white">Loading Workshops...</div>}>
+        <WorkshopsClient initialWorkshops={workshopList} initialVendors={DEMO_VENDORS} />
+      </Suspense>
+    );
+  }
   const vQuery = query(collection(db, "users"), where("role", "==", "vendor"));
   const vSnap = await getDocs(vQuery);
   const vList = vSnap.docs.reduce((acc, doc) => {
