@@ -1,89 +1,213 @@
+<div align="center">
+
 # VibeConnect
 
-Workshop booking platform. Participants browse workshops, register and pay online. Vendors run their own listings, participants, refunds and reviews from a dashboard. Admins manage accounts.
+### Discover workshops. Book experiences. Connect with people.
 
-Next.js 16 App Router, TypeScript, Firebase (Firestore + Auth), Stripe, Tailwind CSS 4.
+A full-stack workshop discovery and booking platform built as a two-semester Commercial Computing project.
 
-![Next.js 16.1](https://img.shields.io/badge/Next.js-16.1-000000?logo=nextdotjs&logoColor=white)
-![React 19.2](https://img.shields.io/badge/React-19.2-61DAFB?logo=react&logoColor=black)
-![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
-![Tailwind 4](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss&logoColor=white)
-![Firebase 12](https://img.shields.io/badge/Firebase-12-FFCA28?logo=firebase&logoColor=black)
-![Stripe 20](https://img.shields.io/badge/Stripe-20-635BFF?logo=stripe&logoColor=white)
+[Live Product](https://vibe-connect-tau.vercel.app/) · [Project Documentation](./docs/PROJECT_DOCUMENTATION.md) · [Agile Sprint History](./docs/AGILE_SPRINT_HISTORY.md) · [Contributors](./docs/CONTRIBUTORS.md)
 
-## Features
+![Next.js](https://img.shields.io/badge/Next.js-16.1-black?logo=next.js&logoColor=white)
+![React](https://img.shields.io/badge/React-19.2-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Firebase](https://img.shields.io/badge/Firebase-12-FFCA28?logo=firebase&logoColor=black)
+![Stripe](https://img.shields.io/badge/Stripe-20-635BFF?logo=stripe&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss&logoColor=white)
+![Playwright](https://img.shields.io/badge/Playwright-E2E-2EAD33?logo=playwright&logoColor=white)
 
-**Participants**
+</div>
 
-- Workshop catalogue with detail pages and per-workshop registration
-- Registration flow including a digital consent form
-- Stripe payment sheet for paid workshops
-- Profile page, FAQ, and custom workshop requests
+---
 
-**Vendors** (`/vendor`)
+## What is VibeConnect?
 
-- Dashboard with eight views: overview, workshops, participants, custom requests, customization, refunds, reviews, reports
-- Refund handling with configurable refund timing and post-refund review restrictions
-- Reports view with charts (Recharts) and PDF export (jsPDF)
+VibeConnect is a centralized platform for discovering, booking, and managing workshops.
 
-**Admins** (`/admin`)
+The project started from a real user problem identified during Semester 1: workshop discovery and registration were spread across Instagram, WhatsApp, Facebook Messenger, phone calls, Google Forms, and manual payment processes. Participants had difficulty comparing workshops, receiving fast confirmation, understanding refund rules, and trusting unfamiliar organizers. Organizers also had to manage participants, payments, and communication across several disconnected tools.
 
-- Admin sign-in and registration
-- Vendor verification notices
+VibeConnect brings those activities into one system.
 
-## Routes
+Participants can discover workshops, filter them by relevant criteria, register one or multiple people, submit consent information for under-18 participants, pay through Stripe, view booking status, request refunds, submit reviews, and report unresolved issues.
 
-| Route | Page |
+Vendors get a dedicated management area for creating workshops, managing participants, controlling refund rules, tracking revenue, handling custom requests, and managing workshop availability.
+
+Administrators get system-wide controls for vendor verification, user management, payment oversight, refund monitoring, reports, and access control.
+
+## Why it was built
+
+The Semester 1 proposal was supported by a structured participant survey. The documented findings included:
+
+- 100% of respondents reported slow replies from organizers.
+- 67% found the registration process burdensome because of multiple steps and a lack of instant confirmation.
+- 78% reported unclear refund or cancellation rules.
+- Instagram, WhatsApp, and phone calls were among the main communication methods with organizers.
+
+The target market was divided into three main participant groups:
+
+- Children aged 3-15, usually represented by a parent or guardian.
+- Young adults aged 16-25.
+- Adults aged 25+.
+
+The proposed business model used a 2% commission on paid bookings, supported by sponsored event placements and local business partnerships.
+
+## From proposal to final product
+
+The architecture changed during development.
+
+The Semester 1 proposal described a static frontend with an API layer and PostgreSQL database. During Semester 2, the implementation evolved into a modern Next.js application using Firebase and Stripe.
+
+### Final stack
+
+| Layer | Technology |
 |---|---|
-| `/` | Home, with featured workshops |
-| `/workshops` | Workshop catalogue |
-| `/register`, `/register/[id]` | Registration entry and per-workshop registration |
-| `/vendor` | Vendor dashboard |
-| `/admin`, `/admin/login`, `/admin/register` | Admin area |
-| `/profile` | Participant profile |
-| `/custom-request` | Custom workshop request |
-| `/faq` | FAQ |
-| `/seed` | Firestore seed helper |
+| Frontend | Next.js App Router, React, TypeScript |
+| UI | Tailwind CSS 4 |
+| Authentication | Firebase Authentication |
+| Database | Firebase Firestore |
+| File storage | Firebase Storage |
+| Payments | Stripe |
+| Charts | Recharts |
+| PDF generation | jsPDF |
+| Animation | Framer Motion, Lenis |
+| Testing | Playwright |
+| Hosting | Vercel |
 
-## Stack
+## Product features
 
-| Layer | Choice |
-|---|---|
-| Framework | Next.js 16.1 (App Router), React 19.2, TypeScript 5 |
-| Styling | Tailwind CSS 4, tailwindcss-animate |
-| Data and auth | Firebase 12: Firestore and Firebase Auth |
-| Payments | Stripe 20 with @stripe/react-stripe-js |
-| Motion | Framer Motion, Lenis smooth scroll |
-| Charts and export | Recharts, jsPDF |
-| Tests | Playwright, end to end |
-| Package manager | pnpm workspace |
+### Participant experience
 
-## Project layout
+- Workshop catalogue with search and filters.
+- Workshop details, availability, location, price, age group, and refund information.
+- Multi-participant registration.
+- Single checkout flow.
+- Stripe payment integration.
+- Booking and payment status.
+- Consent upload for workshops requiring it.
+- Refund requests and status tracking.
+- Reviews controlled by registration and workshop completion rules.
+- Workshop issue reporting.
 
-| Path | Purpose |
-|---|---|
-| `app/` | Routes and page components |
-| `app/models/` | Domain models: `User`, `Workshop`, `Participant`, `Report` |
-| `app/controllers/` | `WorkshopController`, `ParticipantController`, `RegistrationController` |
-| `app/components/views/VendorDashboard/` | The eight dashboard views |
-| `app/api/` | Route handlers: `create-payment-intent`, `refund` |
-| `app/context/AuthContext.tsx` | Auth state and session handling |
-| `firebase/` | Firebase config plus Firestore action modules (`workshopActions`, `refundActions`, `reportActions`) |
-| `firestore.rules` | Security rules with signed-in and owner helpers |
-| `firestore.indexes.json` | Composite indexes |
-| `lib/` | Stripe client and shared utilities |
-| `tests/` | Playwright suites |
-| `FirebaseDB-Json files/` | Seed data exports, used with the `/seed` route |
+### Vendor experience
 
-## Getting started
+- Vendor onboarding and verification.
+- Workshop creation, editing, and deletion.
+- Participant management.
+- Refund policy configuration.
+- Refund request handling.
+- Revenue reporting.
+- Custom workshop requests.
+- Workshop freeze controls.
+- Participant and consent visibility.
+
+### Admin experience
+
+- Vendor approval and rejection.
+- User suspension and deletion.
+- Payment review.
+- Refund oversight.
+- Reports and issue monitoring.
+- Role-based access control.
+
+## Agile development
+
+The system was delivered through three development sprints.
+
+| Sprint | Focus | Main outcome |
+|---|---|---|
+| Sprint 1 | Workshop discovery, booking, vendor management | Core workshop ecosystem and booking flow |
+| Sprint 2 | Payments, admin control, refunds, bulk booking, consent | Commercial reliability and financial controls |
+| Sprint 3 | Authentication, Stripe, refunds, reporting, security | Secure and commercially mature final system |
+
+Sprint 4 documentation and presentation material consolidated the completed implementation and evidence.
+
+The project also used lecturer feedback as backlog refinement input. Later changes addressed refund ownership, refund timing, workshop freezing after registrations, review validity, Stripe refund handling, reporting, and role restrictions.
+
+## Contributors
+
+### Group 11
+
+| Contributor | Student ID | Sprint 1 | Sprint 2 | Sprint 3 |
+|---|---|---|---|---|
+| Sanuthi Vinsith Mayadunna | CB012708 | Scrum Master / BA | Developer | QA |
+| Faraj Farook | CB012653 | Developer | QA | Developer |
+| Tony Willis David | CB015830 | QA | Scrum Master / BA | BA / Scrum Master |
+
+The role rotation was part of the Agile assessment structure and gave each team member experience across analysis, coordination, development, and quality assurance.
+
+See [full contributor notes](./docs/CONTRIBUTORS.md).
+
+## Testing and security
+
+The project includes Playwright end-to-end testing for critical paths, integration behaviour, admin flows, security access controls, and UI checks.
+
+User acceptance testing was performed using Participant, Vendor, and Admin roles against the hosted application.
+
+Security validation included:
+
+- Browser-based security and regression checks.
+- Firebase Console verification.
+- Stripe Test Mode.
+- Nikto.
+- Nuclei.
+
+The documented Nuclei scan reported no medium, high, or critical findings. Nikto identified two low-risk hardening items: a permissive CORS policy and a missing X-Content-Type-Options header.
+
+See [Testing and Security Evidence](./docs/TESTING_AND_SECURITY.md).
+
+## Product screenshots
+
+The repository includes an automated Playwright workflow that captures the live product directly from the hosted Vercel deployment and stores the images in `docs/screenshots/`.
+
+### Homepage
+
+![VibeConnect homepage](./docs/screenshots/home.png)
+
+### Workshop discovery
+
+![VibeConnect workshops](./docs/screenshots/workshops.png)
+
+### Login
+
+![VibeConnect login](./docs/screenshots/login.png)
+
+### Registration
+
+![VibeConnect registration](./docs/screenshots/register.png)
+
+### FAQ
+
+![VibeConnect FAQ](./docs/screenshots/faq.png)
+
+The screenshots are refreshed automatically through GitHub Actions so the README stays tied to the hosted product.
+
+## Documentation
+
+- [Project Documentation](./docs/PROJECT_DOCUMENTATION.md)
+- [Agile Sprint History](./docs/AGILE_SPRINT_HISTORY.md)
+- [Testing and Security Evidence](./docs/TESTING_AND_SECURITY.md)
+- [Contributors](./docs/CONTRIBUTORS.md)
+- [Screenshot capture workflow](./.github/workflows/capture-readme-screenshots.yml)
+- [Screenshot capture script](./scripts/capture-readme-screenshots.mjs)
+
+## Run locally
+
+### Requirements
+
+- Node.js
+- pnpm
+- A Firebase project
+- Stripe test configuration
+
+### Install
 
 ```bash
 pnpm install
 ```
 
-Create `.env.local` in the project root and fill it in:
+Create `.env.local` in the project root:
 
-```bash
+```env
 NEXT_PUBLIC_FIREBASE_API_KEY=
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=
@@ -93,25 +217,59 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 STRIPE_TEST_CLIENT_SECRET=
 ```
 
-The Firebase values come from your own Firebase project settings. The Stripe key is a test key, so payments run in test mode.
+Start the development server:
 
 ```bash
-pnpm dev        # development server on http://localhost:3000
-pnpm build      # production build
-pnpm lint       # eslint
-pnpm test:e2e   # Playwright
+pnpm dev
 ```
 
-## Tests
+Open `http://localhost:3000`.
 
-Playwright covers five suites: `critical-path`, `integration`, `admin-integration`, `security` and `ui-visuals`. Upload fixtures live in `tests/assets/`.
+### Useful commands
 
-## Notes
+```bash
+pnpm build
+pnpm lint
+pnpm test:e2e
+```
 
-- `lint_log.txt` and `lint_output.txt` are committed lint dumps from an earlier session. Nothing in the build reads them.
-- `components/CosmicBackground.tsx` duplicates `app/components/CosmicBackground.tsx`.
-- No license file.
+## Repository structure
 
-## Author
+```text
+app/                         Next.js routes, views, controllers and components
+firebase/                    Firebase configuration and Firestore actions
+lib/                         Shared utilities and Stripe integration
+tests/                       Playwright end-to-end tests
+docs/                        Project, sprint, testing and screenshot documentation
+scripts/                     Automated README screenshot capture
+```
 
-Faraj Farook
+## Live system
+
+**Vercel:** https://vibe-connect-tau.vercel.app/
+
+The hosted deployment was the system used for the documented user acceptance and security testing.
+
+## Academic context
+
+VibeConnect was developed for COMP50001 Commercial Computing at Level 5.
+
+The project covered:
+
+- Domain research and requirements gathering.
+- Stakeholder and persona analysis.
+- Agile planning and sprint delivery.
+- Software implementation.
+- Project management.
+- Testing and quality assurance.
+- Security validation.
+- User acceptance testing.
+- Final product demonstration.
+
+---
+
+<div align="center">
+
+Built by Group 11
+
+</div>
