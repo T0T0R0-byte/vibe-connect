@@ -40,6 +40,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+    const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
     const [user, setUser] = useState<User | null>(null);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [loading, setLoading] = useState(true);
