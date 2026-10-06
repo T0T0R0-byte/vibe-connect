@@ -125,6 +125,63 @@ export const getVendorWorkshops = async (vendorId: string) => {
 };
 
 // GET ALL WORKSHOPS (For Homepage)
+const DEMO_WORKSHOPS = [
+  {
+    id: "demo-1",
+    title: "Neon Street Photography",
+    description: "Master night photography, lighting and creative composition with a working photographer.",
+    fullDetails: "A hands-on street photography workshop covering camera settings, light trails, portrait lighting and night composition.",
+    category: "Art",
+    date: "2026-11-14",
+    location: "Colombo",
+    capacity: 18,
+    ageGroup: "18+",
+    consentRequired: false,
+    price: 4500,
+    refundUntil: "2026-11-12",
+    imageUrl: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1200",
+    imageUrls: ["https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1200"],
+    vendorId: "demo-vendor",
+    vendorName: "Vibe Studio"
+  },
+  {
+    id: "demo-2",
+    title: "Modern Pottery Lab",
+    description: "Shape, glaze and finish your own ceramic pieces in a guided studio session.",
+    fullDetails: "Learn wheel basics, hand-building, surface texture and finishing techniques with a studio artist.",
+    category: "Art",
+    date: "2026-11-21",
+    location: "Mount Lavinia",
+    capacity: 12,
+    ageGroup: "All Ages",
+    consentRequired: false,
+    price: 6500,
+    refundUntil: "2026-11-19",
+    imageUrl: "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?w=1200",
+    imageUrls: ["https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?w=1200"],
+    vendorId: "demo-vendor-2",
+    vendorName: "Clay House"
+  },
+  {
+    id: "demo-3",
+    title: "Build Your First AI Product",
+    description: "Turn an idea into a practical AI product with a product engineer.",
+    fullDetails: "A practical workshop on problem framing, prompting, prototyping, evaluation and shipping an AI-powered feature.",
+    category: "Tech",
+    date: "2026-12-05",
+    location: "Colombo",
+    capacity: 24,
+    ageGroup: "16+",
+    consentRequired: false,
+    price: 8000,
+    refundUntil: "2026-12-03",
+    imageUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200",
+    imageUrls: ["https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200"],
+    vendorId: "demo-vendor-3",
+    vendorName: "Build Lab"
+  }
+];
+
 export const getAllWorkshops = async () => {
   const { sanitizeData } = await import("@/app/utils/serialize");
   const q = query(collection(db, "workshops"));
