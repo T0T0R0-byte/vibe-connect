@@ -182,10 +182,6 @@ The repository includes an automated Playwright workflow that opens the hosted p
   </tr>
 </table>
 
-<p align="center"><strong>FAQ and support</strong></p>
-<p align="center">
-  <img src="./docs/screenshots/faq.png" alt="VibeConnect FAQ" width="80%">
-</p>
 
 The screenshots are generated from the hosted product and refreshed automatically through GitHub Actions.
 
