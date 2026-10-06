@@ -1,8 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig = {
-  output: process.env.GITHUB_PAGES === "true" ? "export" : undefined,
-  trailingSlash: true,
   /* config options here */
   reactCompiler: false,
   compress: true,
@@ -15,7 +13,6 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: process.env.GITHUB_PAGES === "true",
     minimumCacheTTL: 60,
     formats: ['image/webp'],
     remotePatterns: [
@@ -45,26 +42,44 @@ const nextConfig = {
       },
     ],
   },
-  ...(process.env.GITHUB_PAGES === "true" ? {} : {
-    async headers() {
-      return [
-        {
-          source: "/:path*",
-          headers: [
-            { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-            { key: "X-Frame-Options", value: "DENY" },
-            { key: "X-Content-Type-Options", value: "nosniff" },
-            { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-            { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" }
-          ],
-        },
-        {
-          source: "/(api|dashboard|vendor)/:path*",
-          headers: [{ key: "Cache-Control", value: "no-store, must-revalidate" }],
-        },
-      ];
-    },
-  }),
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          }
+        ],
+      },
+      {
+        source: '/(api|dashboard|vendor)/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, must-revalidate',
+          },
+        ],
+      },
+    ];
+  },
   // experimental: { 
   //   turbopack: { root: "." } 
   // }
