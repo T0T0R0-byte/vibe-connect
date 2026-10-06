@@ -155,35 +155,46 @@ The documented Nuclei scan reported no medium, high, or critical findings. Nikto
 
 See [Testing and Security Evidence](./docs/TESTING_AND_SECURITY.md).
 
-## Product screenshots
+## Product showcase
 
-The repository includes an automated Playwright workflow that captures the live product directly from the hosted Vercel deployment and stores the images in `docs/screenshots/`.
+The repository includes an automated Playwright workflow that opens the hosted product and captures the real rendered interface into `docs/screenshots/`.
 
-### Homepage
+<table>
+  <tr>
+    <td width="50%">
+      <p align="center"><strong>Homepage</strong></p>
+      <img src="./docs/screenshots/home.png" alt="VibeConnect homepage">
+    </td>
+    <td width="50%">
+      <p align="center"><strong>Workshop discovery</strong></p>
+      <img src="./docs/screenshots/workshops.png" alt="VibeConnect workshops">
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <p align="center"><strong>Login</strong></p>
+      <img src="./docs/screenshots/login.png" alt="VibeConnect login">
+    </td>
+    <td width="50%">
+      <p align="center"><strong>Registration</strong></p>
+      <img src="./docs/screenshots/register.png" alt="VibeConnect registration">
+    </td>
+  </tr>
+</table>
 
-![VibeConnect homepage](./docs/screenshots/home.png)
+<p align="center"><strong>FAQ and support</strong></p>
+<p align="center">
+  <img src="./docs/screenshots/faq.png" alt="VibeConnect FAQ" width="80%">
+</p>
 
-### Workshop discovery
+The screenshots are generated from the hosted product and refreshed automatically through GitHub Actions.
 
-![VibeConnect workshops](./docs/screenshots/workshops.png)
-
-### Login
-
-![VibeConnect login](./docs/screenshots/login.png)
-
-### Registration
-
-![VibeConnect registration](./docs/screenshots/register.png)
-
-### FAQ
-
-![VibeConnect FAQ](./docs/screenshots/faq.png)
-
-The screenshots are refreshed automatically through GitHub Actions so the README stays tied to the hosted product.
+[View the screenshot workflow](./.github/workflows/capture-readme-screenshots.yml).
 
 ## Documentation
 
 - [Project Documentation](./docs/PROJECT_DOCUMENTATION.md)
+- [Academic Source Material](./docs/ACADEMIC_SOURCE_INDEX.md)
 - [Agile Sprint History](./docs/AGILE_SPRINT_HISTORY.md)
 - [Testing and Security Evidence](./docs/TESTING_AND_SECURITY.md)
 - [Contributors](./docs/CONTRIBUTORS.md)
