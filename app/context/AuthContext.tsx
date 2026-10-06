@@ -47,6 +47,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const router = useRouter();
 
     useEffect(() => {
+        if (demoMode) {
+            setUser(null);
+            setUserData(null);
+            setLoading(false);
+            return;
+        }
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             setLoading(true);
             if (currentUser) {
@@ -97,9 +103,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [demoMode]);
 
     const logout = async () => {
+        if (demoMode) {
+            setUser(null);
+            setUserData(null);
+            router.push("/login");
+            return;
+        }
         await signOut(auth);
         setUser(null);
         setUserData(null);
@@ -107,7 +119,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const refreshUserData = async () => {
-        if (!user) return;
+        if (demoMode || !user) return;
         try {
             const userDoc = await getDoc(doc(db, "users", user.uid));
             if (userDoc.exists()) {
