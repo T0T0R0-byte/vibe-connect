@@ -6,6 +6,33 @@ import { Suspense } from "react";
 
 export const revalidate = 60; // Cache for 60 seconds
 
+const DEMO_VENDORS = {
+  "demo-vendor": {
+    id: "demo-vendor",
+    displayName: "Maya Perera",
+    businessName: "Vibe Studio",
+    customOrdersEnabled: true,
+    phoneNumber: "+94 77 000 0000",
+    socialLink: "https://instagram.com/"
+  },
+  "demo-vendor-2": {
+    id: "demo-vendor-2",
+    displayName: "Nethmi Silva",
+    businessName: "Clay House",
+    customOrdersEnabled: true,
+    phoneNumber: "+94 77 000 0001",
+    socialLink: "https://instagram.com/"
+  },
+  "demo-vendor-3": {
+    id: "demo-vendor-3",
+    displayName: "Akeel Rahman",
+    businessName: "Build Lab",
+    customOrdersEnabled: true,
+    phoneNumber: "+94 77 000 0002",
+    socialLink: "https://instagram.com/"
+  }
+};
+
 export default async function WorkshopsPage() {
   // 1. Fetch Workshops
   const workshopList = await getAllWorkshops();
