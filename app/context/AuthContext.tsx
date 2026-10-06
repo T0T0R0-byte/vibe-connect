@@ -40,19 +40,12 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-    const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
     const [user, setUser] = useState<User | null>(null);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
 
     useEffect(() => {
-        if (demoMode) {
-            setUser(null);
-            setUserData(null);
-            setLoading(false);
-            return;
-        }
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             setLoading(true);
             if (currentUser) {
@@ -103,15 +96,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         });
 
         return () => unsubscribe();
-    }, [demoMode]);
+    }, []);
 
     const logout = async () => {
-        if (demoMode) {
-            setUser(null);
-            setUserData(null);
-            router.push("/login");
-            return;
-        }
         await signOut(auth);
         setUser(null);
         setUserData(null);
@@ -119,7 +106,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const refreshUserData = async () => {
-        if (demoMode || !user) return;
+        if (!user) return;
         try {
             const userDoc = await getDoc(doc(db, "users", user.uid));
             if (userDoc.exists()) {
