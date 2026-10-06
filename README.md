@@ -157,7 +157,7 @@ See [Testing and Security Evidence](./docs/TESTING_AND_SECURITY.md).
 
 ## Product showcase
 
-The repository includes an automated Playwright workflow that opens the hosted product and captures the real rendered interface into `docs/screenshots/`.
+
 
 <table>
   <tr>
@@ -183,9 +183,7 @@ The repository includes an automated Playwright workflow that opens the hosted p
 </table>
 
 
-The screenshots are generated from the hosted product and refreshed automatically through GitHub Actions.
 
-[View the screenshot workflow](./.github/workflows/capture-readme-screenshots.yml).
 
 ## Documentation
 
@@ -194,8 +192,6 @@ The screenshots are generated from the hosted product and refreshed automaticall
 - [Agile Sprint History](./docs/AGILE_SPRINT_HISTORY.md)
 - [Testing and Security Evidence](./docs/TESTING_AND_SECURITY.md)
 - [Contributors](./docs/CONTRIBUTORS.md)
-- [Screenshot capture workflow](./.github/workflows/capture-readme-screenshots.yml)
-- [Screenshot capture script](./scripts/capture-readme-screenshots.mjs)
 
 ## Run locally
 
